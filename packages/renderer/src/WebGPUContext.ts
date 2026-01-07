@@ -98,6 +98,7 @@ export class WebGPUContext {
       const context: GPUCanvasContext | null = options.canvas.getContext('webgpu');
       if (!context) {
         console.warn('Failed to get WebGPU canvas context');
+        device.destroy(); // Clean up device before returning
         this.state.isAvailable = false;
         this.state.canvas = options.canvas;
         return false;
@@ -107,12 +108,20 @@ export class WebGPUContext {
       const format: GPUTextureFormat = navigator.gpu.getPreferredCanvasFormat();
 
       // Configure context
-      context.configure({
-        device,
-        format,
-        alphaMode: options.alphaMode || 'premultiplied',
-        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC
-      });
+      try {
+        context.configure({
+          device,
+          format,
+          alphaMode: options.alphaMode || 'premultiplied',
+          usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC
+        });
+      } catch (configError: unknown) {
+        console.error('Failed to configure WebGPU context:', configError);
+        device.destroy(); // Clean up device before returning
+        this.state.isAvailable = false;
+        this.state.canvas = options.canvas;
+        return false;
+      }
 
       // Update state
       this.state = {
