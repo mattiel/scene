@@ -1,8 +1,7 @@
 ---
-
-## description: "Build orchestrator - reads plan and coordinates implementation phases"
-
+description: "Build orchestrator - reads plan and coordinates implementation phases"
 alwaysApply: false
+---
 
 # Build Orchestrator
 
