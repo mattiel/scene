@@ -49,6 +49,7 @@ When building specific features, invoke the appropriate specialist:
 | Pointer/picking/inertia | `@input-engineer` |
 | Accessibility/keyboard | `@a11y-engineer` |
 | Orchestrate a build phase | `@build` |
+| Create/refine agent rules | `@agent-ruler` |
 
 ## Graceful Degradation
 
