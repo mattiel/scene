@@ -44,6 +44,7 @@ export class RAFScheduler {
   private rafId: number | null = null;
   private lastTimestamp: number = 0;
   private isRunning: boolean = false;
+  private insideFrame: boolean = false;
   private nextCallbackId: number = 1;
   
   // FPS tracking
@@ -96,7 +97,12 @@ export class RAFScheduler {
     this.fpsTimestamp = this.lastTimestamp;
     this.frameCount = 0;
     
-    this.scheduleFrame();
+    // Only schedule a frame if we're not currently inside a frame callback.
+    // If we are inside a frame, the frame will schedule the next one after
+    // all callbacks complete.
+    if (!this.insideFrame) {
+      this.scheduleFrame();
+    }
   }
 
   /**
@@ -160,6 +166,10 @@ export class RAFScheduler {
   private onFrame(timestamp: number): void {
     if (!this.isRunning) return;
 
+    // Mark that we're inside a frame callback to prevent start() from
+    // scheduling a duplicate RAF
+    this.insideFrame = true;
+
     // Calculate delta time
     const deltaTime = timestamp - this.lastTimestamp;
     this.lastTimestamp = timestamp;
@@ -190,7 +200,10 @@ export class RAFScheduler {
       }
     }
 
-    // Schedule next frame
+    // Now that all callbacks have executed, mark that we're outside the frame
+    this.insideFrame = false;
+
+    // Schedule next frame only if still running after all callbacks
     if (this.isRunning) {
       this.scheduleFrame();
     }
