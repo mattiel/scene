@@ -134,8 +134,8 @@ export class QuadRenderer {
     const format: GPUTextureFormat = this.gpuContext.format!;
 
     // Get shaders from library
-    const vertexShader: any = this.shaderLibrary.get('passthrough_vertex');
-    const fragmentShader: any = this.shaderLibrary.get('textured_quad');
+    const vertexShader: ReturnType<ShaderLibrary['get']> = this.shaderLibrary.get('passthrough_vertex');
+    const fragmentShader: ReturnType<ShaderLibrary['get']> = this.shaderLibrary.get('textured_quad');
 
     if (!vertexShader || !fragmentShader) {
       throw new Error('Required shaders not found in library');

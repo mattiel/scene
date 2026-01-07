@@ -83,8 +83,8 @@ export class ScreenPass {
     const format: GPUTextureFormat = this.gpuContext.format!;
 
     // Get shaders from library
-    const vertexShader: any = this.shaderLibrary.get('fullscreen_vertex');
-    const fragmentShader: any = this.shaderLibrary.get(options.shaderName);
+    const vertexShader: ReturnType<ShaderLibrary['get']> = this.shaderLibrary.get('fullscreen_vertex');
+    const fragmentShader: ReturnType<ShaderLibrary['get']> = this.shaderLibrary.get(options.shaderName);
 
     if (!vertexShader || !fragmentShader) {
       throw new Error(`Shader not found: ${options.shaderName}`);
@@ -99,7 +99,7 @@ export class ScreenPass {
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
       });
 
-      device.queue.writeBuffer(uniformBuffer, 0, options.uniformData);
+      device.queue.writeBuffer(uniformBuffer, 0, options.uniformData.buffer, options.uniformData.byteOffset, options.uniformData.byteLength);
     }
 
     // Create pipeline
@@ -161,7 +161,7 @@ export class ScreenPass {
     }
 
     const device: GPUDevice = this.gpuContext.device!;
-    device.queue.writeBuffer(effect.uniformBuffer, 0, data);
+    device.queue.writeBuffer(effect.uniformBuffer, 0, data.buffer, data.byteOffset, data.byteLength);
   }
 
   /**
