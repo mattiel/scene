@@ -1,0 +1,43 @@
+---
+description: "Credit-conscious patterns for efficient AI assistance"
+alwaysApply: true
+---
+
+# Efficiency Guidelines
+
+Optimize for minimal credit usage while maintaining quality.
+
+## File Operations
+
+- **Target specific files** - Don't read entire directories when you know which file you need
+- **Batch related edits** - Make multiple related changes in one tool call when possible
+- **Don't re-read** - If a file is already in context, don't read it again
+- **Use grep/glob** - Search for specific patterns instead of reading files to find them
+
+## Code Generation
+
+- **Don't over-engineer** - Only implement what's requested
+- **No speculative features** - Don't add "nice to have" functionality
+- **Keep it minimal** - Prefer simple solutions over complex ones
+- **Follow existing patterns** - Match the codebase style, don't reinvent
+
+## Response Style
+
+- **Be concise** - Avoid lengthy explanations when code speaks for itself
+- **Skip obvious** - Don't explain basic syntax or well-known patterns
+- **Summarize changes** - Brief description of what was done, not play-by-play
+
+## What NOT To Do
+
+- Don't read the entire codebase "to understand context"
+- Don't add error handling for impossible cases
+- Don't create abstractions for single-use code
+- Don't add comments explaining obvious code
+- Don't refactor unrelated code while fixing a bug
+- Don't add tests unless asked or clearly necessary
+
+## Parallelization
+
+- Read multiple files in parallel when needed
+- Make independent edits in parallel
+- Run independent shell commands in parallel
