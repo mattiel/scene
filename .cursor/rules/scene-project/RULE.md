@@ -17,8 +17,8 @@ You are working on **Scene**, a DOM-first cinematic effects engine for the web.
 ## Key References
 
 Always consult these files for project context:
-- `@SCENE_SPEC.md` - Full product and engineering specification
-- `@IMPLEMENTATION_PLAN.md` - Implementation phases and architecture
+- `SCENE_SPEC.md` - Full product and engineering specification
+- `IMPLEMENTATION_PLAN.md` - Implementation phases and architecture
 
 ## Package Structure
 

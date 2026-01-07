@@ -1,17 +1,24 @@
 ---
 description: "TypeScript coding standards for Scene packages"
-globs: "**/*.ts"
+globs: "**/*.ts, **/*.tsx, **/*.d.ts"
 alwaysApply: false
 ---
 
 # TypeScript Standards
 
-## Type Safety
+## Type System
 
 - **Strict mode** - All packages use `strict: true` in tsconfig
 - **No `any`** - Use `unknown` and narrow, or define proper types
 - **Explicit returns** - Public API functions must have explicit return types
 - **No non-null assertions** - Avoid `!` operator; use proper null checks
+- **Prefer interfaces over types** - Use interfaces for object definitions
+- **Use type for unions** - Use type for unions, intersections, and mapped types
+- **Leverage utility types** - Use TypeScript's built-in utility types (Partial, Pick, Omit, etc.)
+- **Use generics** - Use generics for reusable type patterns
+- **Use readonly** - Use readonly for immutable properties
+- **Discriminated unions** - Leverage discriminated unions for type safety
+- **Type guards** - Use type guards for runtime type checking
 
 ## Naming Conventions
 
@@ -23,14 +30,21 @@ class SurfaceRegistry {}
 interface Surface {}
 interface SurfaceOptions {}
 
+// React Props: Suffix with 'Props'
+interface ButtonProps {}
+
 // Types: PascalCase
 type InteractionMode = 'dom' | 'canvas';
 
 // Functions/methods: camelCase
 function createScene() {}
 
+// Variables: camelCase with descriptive auxiliary verbs
+const isLoading: boolean = false;
+const hasError: boolean = false;
+
 // Constants: UPPER_SNAKE_CASE
-const MAX_SURFACES = 100;
+const MAX_SURFACES: number = 100;
 
 // Private members: prefix with underscore
 private _device: GPUDevice;
@@ -57,6 +71,7 @@ import type { Options } from './types';
 - **Named exports** - Prefer over default exports
 - **Barrel files** - Use `index.ts` to re-export public API
 - **Types co-located** - Keep types near their implementation
+- **Shared types directory** - Place shared types in a `types` directory when needed
 
 ```typescript
 // Good
@@ -67,6 +82,15 @@ export interface EngineOptions {}
 export default class Engine {}
 ```
 
+## Code Organization
+
+Structure code for maintainability:
+
+- Keep type definitions close to their usage
+- Export shared types from dedicated type files
+- Use barrel exports (`index.ts`) for public APIs
+- Co-locate component props with components
+
 ## Documentation
 
 ```typescript
@@ -75,17 +99,92 @@ export default class Engine {}
  * 
  * @param options - Configuration options
  * @returns Initialized Scene instance
+ * @throws {InitializationError} When WebGPU initialization fails
  */
 export function createScene(options: SceneOptions): Scene {
   // ...
 }
 ```
 
+## Functions
+
+Write clear, type-safe functions:
+
+- **Explicit return types** - Always specify return types for public functions
+- **Arrow functions** - Use arrow functions for callbacks and inline methods
+- **Async/await** - Prefer async/await over raw Promises for readability
+- **Error handling** - Handle errors with custom types
+- **Function overloads** - Use overloads for complex type scenarios
+- **Promise rejections** - Always handle Promise rejections
+
+```typescript
+// Explicit return type on async function
+export async function initializeContext(): Promise<WebGPUContext> {
+  try {
+    const adapter: GPUAdapter | null = await navigator.gpu.requestAdapter();
+    if (!adapter) {
+      throw new InitializationError('Failed to get GPU adapter');
+    }
+    return { adapter };
+  } catch (error: unknown) {
+    throw new InitializationError('Initialization failed', { cause: error });
+  }
+}
+
+// Arrow function for callbacks
+const handleClick = (event: MouseEvent): void => {
+  console.log(event.clientX, event.clientY);
+};
+```
+
 ## Error Handling
 
-- Throw typed errors for exceptional cases
-- Use Result types for expected failures
-- Document thrown errors in JSDoc
+Implement robust error handling with type safety:
+
+- **Typed errors** - Throw typed errors for exceptional cases
+- **Custom error types** - Create domain-specific error classes
+- **Result types** - Use Result pattern for expected failures
+- **Document errors** - Document thrown errors in JSDoc with `@throws`
+- **Typed catch** - Always type catch clauses as `unknown`
+- **Null checking** - Use proper null checks instead of non-null assertions
+
+```typescript
+// Custom error type
+export class WebGPUInitializationError extends Error {
+  constructor(message: string, public readonly cause?: unknown) {
+    super(message);
+    this.name = 'WebGPUInitializationError';
+  }
+}
+
+// Result type pattern for expected failures
+export type Result<T, E = Error> = 
+  | { success: true; value: T }
+  | { success: false; error: E };
+
+export function tryInitialize(): Result<WebGPUContext, WebGPUInitializationError> {
+  try {
+    const context: WebGPUContext = initialize();
+    return { success: true, value: context };
+  } catch (error: unknown) {
+    return { 
+      success: false, 
+      error: new WebGPUInitializationError('Failed to initialize', error) 
+    };
+  }
+}
+
+// Typed catch clause
+try {
+  await riskyOperation();
+} catch (error: unknown) {
+  if (error instanceof WebGPUInitializationError) {
+    console.error('GPU initialization failed:', error.message);
+  } else {
+    throw error;
+  }
+}
+```
 
 ## WebGPU Types
 
@@ -98,5 +197,44 @@ interface WebGPUContext {
   adapter: GPUAdapter;
   device: GPUDevice;
   context: GPUCanvasContext;
+}
+```
+
+## Design Patterns
+
+Use these patterns for maintainability and testability:
+
+- **Builder pattern** - Complex object creation with fluent API
+- **Factory pattern** - Centralized object instantiation logic
+- **Dependency injection** - Constructor injection for loose coupling
+
+```typescript
+// Builder pattern example
+export class SceneBuilder {
+  private options: Partial<SceneOptions> = {};
+
+  withCanvas(canvas: HTMLCanvasElement): this {
+    this.options.canvas = canvas;
+    return this;
+  }
+
+  build(): Scene {
+    return new Scene(this.options as SceneOptions);
+  }
+}
+
+// Factory pattern example
+export class RendererFactory {
+  static create(type: 'webgpu' | 'canvas'): Renderer {
+    return type === 'webgpu' ? new WebGPURenderer() : new CanvasRenderer();
+  }
+}
+
+// Dependency injection example
+export class Engine {
+  constructor(
+    private readonly eventBus: EventBus,
+    private readonly scheduler: RAFScheduler
+  ) {}
 }
 ```

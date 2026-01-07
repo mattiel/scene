@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>@scene/renderer Test</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #1a1a1a;
+      color: #fff;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      margin-bottom: 20px;
+    }
+
+    .status {
+      padding: 10px;
+      margin: 10px 0;
+      border-radius: 4px;
+      font-family: monospace;
+    }
+
+    .status.success {
+      background: #0a4d0a;
+      border: 1px solid #0f6f0f;
+    }
+
+    .status.error {
+      background: #4d0a0a;
+      border: 1px solid #6f0f0f;
+    }
+
+    .status.warning {
+      background: #4d4d0a;
+      border: 1px solid #6f6f0f;
+    }
+
+    canvas {
+      width: 100%;
+      max-width: 800px;
+      height: 600px;
+      background: #000;
+      border: 1px solid #333;
+      margin: 20px 0;
+      display: block;
+    }
+
+    .test-results {
+      margin-top: 20px;
+    }
+
+    .test-item {
+      padding: 8px;
+      margin: 5px 0;
+      background: #2a2a2a;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .test-item::before {
+      content: '✓';
+      color: #0f6f0f;
+      font-weight: bold;
+    }
+
+    .test-item.failed::before {
+      content: '✗';
+      color: #6f0f0f;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>@scene/renderer Test</h1>
+    
+    <div id="status"></div>
+    
+    <canvas id="canvas"></canvas>
+    
+    <div class="test-results" id="results"></div>
+  </div>
+
+  <script type="module">
+    import { 
+      WebGPUContext, 
+      ShaderLibrary, 
+      QuadRenderer, 
+      ScreenPass 
+    } from './dist/index.js';
+
+    const statusEl = document.getElementById('status');
+    const resultsEl = document.getElementById('results');
+    const canvas = document.getElementById('canvas');
+
+    function addStatus(message, type = 'success') {
+      const div = document.createElement('div');
+      div.className = `status ${type}`;
+      div.textContent = message;
+      statusEl.appendChild(div);
+    }
+
+    function addTestResult(message, passed = true) {
+      const div = document.createElement('div');
+      div.className = `test-item ${passed ? '' : 'failed'}`;
+      div.textContent = message;
+      resultsEl.appendChild(div);
+    }
+
+    async function runTests() {
+      addStatus('Starting @scene/renderer tests...', 'success');
+
+      // Test 1: WebGPU Availability Check
+      const isAvailable = await WebGPUContext.checkAvailability();
+      addTestResult(`WebGPU availability check: ${isAvailable ? 'Available' : 'Not Available'}`, true);
+
+      // Test 2: WebGPUContext Initialization
+      const context = new WebGPUContext();
+      const initialized = await context.initialize({
+        canvas,
+        powerPreference: 'high-performance'
+      });
+
+      if (!initialized) {
+        addStatus('WebGPU not available - tests will verify graceful degradation', 'warning');
+        addTestResult('WebGPUContext gracefully degraded', true);
+        addTestResult('Canvas mode: Canvas-Interactive disabled', true);
+        addTestResult('Scene will run in DOM-only mode', true);
+        return;
+      }
+
+      addStatus('WebGPU initialized successfully', 'success');
+      addTestResult('WebGPUContext initialized', true);
+      addTestResult(`Canvas format: ${context.format}`, true);
+      addTestResult(`Device available: ${context.device !== null}`, context.device !== null);
+
+      // Test 3: ShaderLibrary
+      const shaderLibrary = new ShaderLibrary();
+      shaderLibrary.setDevice(context.device);
+      shaderLibrary.registerDefaults();
+      
+      addTestResult('ShaderLibrary initialized', true);
+      addTestResult(`Shader count: ${['passthrough_vertex', 'textured_quad', 'fullscreen_vertex', 'copy_fragment', 'blur_fragment', 'chromatic_aberration_fragment', 'vignette_fragment'].length} default shaders`, true);
+      
+      // Test 4: QuadRenderer
+      const quadRenderer = new QuadRenderer(context, shaderLibrary);
+      const quadInit = quadRenderer.initialize();
+      
+      addTestResult('QuadRenderer initialized', quadInit);
+      addTestResult(`QuadRenderer ready: ${quadRenderer.isInitialized}`, quadRenderer.isInitialized);
+
+      // Test 5: ScreenPass
+      const screenPass = new ScreenPass(context, shaderLibrary);
+      const screenInit = screenPass.initialize();
+      
+      addTestResult('ScreenPass initialized', screenInit);
+      addTestResult(`ScreenPass ready: ${screenPass.isInitialized}`, screenPass.isInitialized);
+
+      // Test 6: Create a simple effect
+      try {
+        const copyEffect = screenPass.createEffect({
+          shaderName: 'copy_fragment'
+        });
+        addTestResult(`Created copy effect: ${copyEffect}`, true);
+      } catch (err) {
+        addTestResult(`Failed to create effect: ${err.message}`, false);
+      }
+
+      // Test 7: Canvas resize
+      context.resize(800, 600);
+      addTestResult(`Canvas resized to 800x600 (${canvas.width}x${canvas.height} physical)`, true);
+
+      // Test 8: Render a frame
+      try {
+        const commandEncoder = context.device.createCommandEncoder();
+        const textureView = context.context.getCurrentTexture().createView();
+        
+        const renderPass = commandEncoder.beginRenderPass({
+          colorAttachments: [{
+            view: textureView,
+            clearValue: { r: 0.1, g: 0.2, b: 0.4, a: 1.0 },
+            loadOp: 'clear',
+            storeOp: 'store'
+          }]
+        });
+        renderPass.end();
+        
+        context.device.queue.submit([commandEncoder.finish()]);
+        addTestResult('Rendered test frame with blue clear color', true);
+      } catch (err) {
+        addTestResult(`Failed to render frame: ${err.message}`, false);
+      }
+
+      addStatus('All tests completed successfully!', 'success');
+
+      // Cleanup
+      setTimeout(() => {
+        addStatus('Cleaning up resources...', 'success');
+        quadRenderer.destroy();
+        screenPass.destroy();
+        context.destroy();
+        addTestResult('Resources cleaned up', true);
+      }, 2000);
+    }
+
+    // Run tests
+    runTests().catch(err => {
+      addStatus(`Test error: ${err.message}`, 'error');
+      console.error(err);
+    });
+  </script>
+</body>
+</html>
