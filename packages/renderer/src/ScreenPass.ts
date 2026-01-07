@@ -49,11 +49,20 @@ export class ScreenPass {
     }
 
     try {
+      // initialize() can be called multiple times (e.g. renderer re-creation).
+      // Ensure we tear down previously-created GPU resources to avoid using
+      // stale pipelines/buffers from a destroyed device.
+      if (this.initialized || this.effects.size > 0 || this.sampler) {
+        this.cleanup();
+      }
+
       this.createSampler();
       this.initialized = true;
       return true;
     } catch (error: unknown) {
       console.error('ScreenPass initialization failed:', error);
+      // Cleanup any resources that were created before the error
+      this.cleanup();
       return false;
     }
   }
@@ -352,9 +361,9 @@ export class ScreenPass {
   }
 
   /**
-   * Cleanup resources
+   * Internal cleanup method for partial initialization failures or re-initialization
    */
-  destroy(): void {
+  private cleanup(): void {
     for (const effect of this.effects.values()) {
       effect.uniformBuffer?.destroy();
     }
@@ -362,5 +371,12 @@ export class ScreenPass {
     this.effects.clear();
     this.sampler = null;
     this.initialized = false;
+  }
+
+  /**
+   * Cleanup resources
+   */
+  destroy(): void {
+    this.cleanup();
   }
 }
