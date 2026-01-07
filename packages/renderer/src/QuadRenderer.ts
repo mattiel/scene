@@ -63,6 +63,8 @@ export class QuadRenderer {
       return true;
     } catch (error: unknown) {
       console.error('QuadRenderer initialization failed:', error);
+      // Cleanup any resources that were created before the error
+      this.cleanup();
       return false;
     }
   }
@@ -295,9 +297,9 @@ export class QuadRenderer {
   }
 
   /**
-   * Cleanup resources
+   * Internal cleanup method for partial initialization failures
    */
-  destroy(): void {
+  private cleanup(): void {
     this.vertexBuffer?.destroy();
     this.indexBuffer?.destroy();
     
@@ -306,5 +308,12 @@ export class QuadRenderer {
     this.indexBuffer = null;
     this.sampler = null;
     this.initialized = false;
+  }
+
+  /**
+   * Cleanup resources
+   */
+  destroy(): void {
+    this.cleanup();
   }
 }

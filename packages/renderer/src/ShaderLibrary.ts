@@ -250,7 +250,9 @@ export class ShaderLibrary {
         
         struct ChromaParams {
           strength: f32,
-          _padding: vec3f,
+          _padding0: f32,
+          _padding1: f32,
+          _padding2: f32,
         };
         
         @group(0) @binding(2) var<uniform> params: ChromaParams;

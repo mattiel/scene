@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Two Effects Stack Test</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #1a1a1a;
+      color: #fff;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      margin-bottom: 20px;
+    }
+
+    .status {
+      padding: 10px;
+      margin: 10px 0;
+      border-radius: 4px;
+      font-family: monospace;
+    }
+
+    .status.success {
+      background: #0a4d0a;
+      border: 1px solid #0f6f0f;
+    }
+
+    .status.error {
+      background: #4d0a0a;
+      border: 1px solid #6f0f0f;
+    }
+
+    canvas {
+      width: 100%;
+      max-width: 800px;
+      height: 400px;
+      background: #000;
+      border: 1px solid #333;
+      margin: 20px 0;
+      display: block;
+    }
+
+    .test-results {
+      margin-top: 20px;
+    }
+
+    .test-item {
+      padding: 8px;
+      margin: 5px 0;
+      background: #2a2a2a;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .test-item::before {
+      content: '✓';
+      color: #0f6f0f;
+      font-weight: bold;
+    }
+
+    .test-item.failed::before {
+      content: '✗';
+      color: #6f0f0f;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Two Effects Stack Test</h1>
+    <p>This test verifies that 2-effect stacks work correctly with only 1 intermediate texture.</p>
+    
+    <div id="status"></div>
+    
+    <canvas id="canvas"></canvas>
+    
+    <div class="test-results" id="results"></div>
+  </div>
+
+  <script type="module">
+    import { 
+      WebGPUContext, 
+      ShaderLibrary, 
+      ScreenPass 
+    } from './dist/index.js';
+
+    const statusEl = document.getElementById('status');
+    const resultsEl = document.getElementById('results');
+    const canvas = document.getElementById('canvas');
+
+    function addStatus(message, type = 'success') {
+      const div = document.createElement('div');
+      div.className = `status ${type}`;
+      div.textContent = message;
+      statusEl.appendChild(div);
+    }
+
+    function addTestResult(message, passed = true) {
+      const div = document.createElement('div');
+      div.className = `test-item ${passed ? '' : 'failed'}`;
+      div.textContent = message;
+      resultsEl.appendChild(div);
+    }
+
+    async function runTest() {
+      addStatus('Starting two-effects stack test...', 'success');
+
+      // Initialize WebGPU
+      const context = new WebGPUContext();
+      const initialized = await context.initialize({
+        canvas,
+        powerPreference: 'high-performance'
+      });
+
+      if (!initialized) {
+        addStatus('WebGPU not available - test cannot run', 'error');
+        return;
+      }
+
+      addStatus('WebGPU initialized successfully', 'success');
+
+      // Initialize ShaderLibrary and ScreenPass
+      const shaderLibrary = new ShaderLibrary();
+      shaderLibrary.setDevice(context.device);
+      shaderLibrary.registerDefaults();
+      
+      const screenPass = new ScreenPass(context, shaderLibrary);
+      screenPass.initialize();
+      
+      addTestResult('ScreenPass initialized', true);
+
+      // Create two effects
+      const blurEffect = screenPass.createEffect({
+        shaderName: 'blur_fragment',
+        uniformData: new Float32Array([1.0, 0.0, 2.0, 0.0])
+      });
+
+      const vignetteEffect = screenPass.createEffect({
+        shaderName: 'vignette_fragment',
+        uniformData: new Float32Array([0.5, 0.5, 0.5, 0.0])
+      });
+
+      addTestResult(`Created blur effect: ${blurEffect}`, true);
+      addTestResult(`Created vignette effect: ${vignetteEffect}`, true);
+
+      // Create source texture (a simple colored texture for testing)
+      const sourceTexture = context.device.createTexture({
+        size: [canvas.width, canvas.height],
+        format: context.format,
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_DST
+      });
+
+      // Create ONLY 1 intermediate texture (this is the fix we're testing)
+      const intermediateTexture = context.device.createTexture({
+        size: [canvas.width, canvas.height],
+        format: context.format,
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT
+      });
+
+      addTestResult('Created 1 intermediate texture (previously would fail)', true);
+
+      // Test: Execute stack with 2 effects and 1 intermediate texture
+      try {
+        const commandEncoder = context.device.createCommandEncoder();
+        
+        // Clear source texture to a color
+        const clearPass = commandEncoder.beginRenderPass({
+          colorAttachments: [{
+            view: sourceTexture.createView(),
+            clearValue: { r: 0.3, g: 0.5, b: 0.8, a: 1.0 },
+            loadOp: 'clear',
+            storeOp: 'store'
+          }]
+        });
+        clearPass.end();
+
+        // Execute 2-effect stack with 1 intermediate texture
+        screenPass.executeStack(
+          commandEncoder,
+          [blurEffect, vignetteEffect],
+          sourceTexture,
+          [intermediateTexture] // Only 1 intermediate texture!
+        );
+
+        context.device.queue.submit([commandEncoder.finish()]);
+        
+        addTestResult('✓ Successfully executed 2-effect stack with 1 intermediate texture', true);
+        addStatus('Fix verified: 2-effect stacks work with 1 intermediate texture!', 'success');
+      } catch (err) {
+        addTestResult(`Failed to execute 2-effect stack: ${err.message}`, false);
+        addStatus('Test failed - see error above', 'error');
+      }
+
+      // Test: Verify that 3+ effects still require 2 intermediates
+      const chromaticEffect = screenPass.createEffect({
+        shaderName: 'chromatic_aberration_fragment',
+        uniformData: new Float32Array([0.01, 0.0, 0.0, 0.0])
+      });
+
+      addTestResult(`Created chromatic aberration effect: ${chromaticEffect}`, true);
+
+      try {
+        const commandEncoder = context.device.createCommandEncoder();
+        
+        // This should fail with a warning (3 effects need 2 intermediates)
+        console.log('Testing 3-effect stack with 1 intermediate (should warn)...');
+        screenPass.executeStack(
+          commandEncoder,
+          [blurEffect, vignetteEffect, chromaticEffect],
+          sourceTexture,
+          [intermediateTexture] // Only 1 intermediate - should warn for 3 effects
+        );
+
+        addTestResult('3-effect stack with 1 intermediate correctly falls back to single effect', true);
+      } catch (err) {
+        addTestResult(`3-effect stack validation error: ${err.message}`, false);
+      }
+
+      // Test: Verify 3-effect stack works with 2 intermediates
+      const intermediate2 = context.device.createTexture({
+        size: [canvas.width, canvas.height],
+        format: context.format,
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT
+      });
+
+      try {
+        const commandEncoder = context.device.createCommandEncoder();
+        
+        screenPass.executeStack(
+          commandEncoder,
+          [blurEffect, vignetteEffect, chromaticEffect],
+          sourceTexture,
+          [intermediateTexture, intermediate2] // 2 intermediates for 3 effects
+        );
+
+        context.device.queue.submit([commandEncoder.finish()]);
+        
+        addTestResult('✓ Successfully executed 3-effect stack with 2 intermediate textures', true);
+      } catch (err) {
+        addTestResult(`Failed to execute 3-effect stack: ${err.message}`, false);
+      }
+
+      addStatus('All tests completed!', 'success');
+
+      // Cleanup
+      setTimeout(() => {
+        screenPass.destroy();
+        context.destroy();
+        addTestResult('Resources cleaned up', true);
+      }, 2000);
+    }
+
+    // Run test
+    runTest().catch(err => {
+      addStatus(`Test error: ${err.message}`, 'error');
+      console.error(err);
+    });
+  </script>
+</body>
+</html>

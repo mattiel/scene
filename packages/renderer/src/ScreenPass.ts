@@ -104,41 +104,48 @@ export class ScreenPass {
       device.queue.writeBuffer(uniformBuffer, 0, options.uniformData.buffer, options.uniformData.byteOffset, options.uniformData.byteLength);
     }
 
-    // Create pipeline
-    const pipeline: GPURenderPipeline = device.createRenderPipeline({
-      label: `${options.shaderName} Pipeline`,
-      layout: 'auto',
-      vertex: {
-        module: vertexShader.module,
-        entryPoint: vertexShader.entryPoints.vertex,
-        buffers: [] // Fullscreen quad generated in vertex shader
-      },
-      fragment: {
-        module: fragmentShader.module,
-        entryPoint: fragmentShader.entryPoints.fragment,
-        targets: [
-          {
-            format,
-            blend: {
-              color: {
-                srcFactor: 'one',
-                dstFactor: 'zero',
-                operation: 'add'
-              },
-              alpha: {
-                srcFactor: 'one',
-                dstFactor: 'zero',
-                operation: 'add'
+    // Create pipeline - wrap in try-catch to cleanup buffer on failure
+    let pipeline: GPURenderPipeline;
+    try {
+      pipeline = device.createRenderPipeline({
+        label: `${options.shaderName} Pipeline`,
+        layout: 'auto',
+        vertex: {
+          module: vertexShader.module,
+          entryPoint: vertexShader.entryPoints.vertex,
+          buffers: [] // Fullscreen quad generated in vertex shader
+        },
+        fragment: {
+          module: fragmentShader.module,
+          entryPoint: fragmentShader.entryPoints.fragment,
+          targets: [
+            {
+              format,
+              blend: {
+                color: {
+                  srcFactor: 'one',
+                  dstFactor: 'zero',
+                  operation: 'add'
+                },
+                alpha: {
+                  srcFactor: 'one',
+                  dstFactor: 'zero',
+                  operation: 'add'
+                }
               }
             }
-          }
-        ]
-      },
-      primitive: {
-        topology: 'triangle-strip',
-        stripIndexFormat: undefined
-      }
-    });
+          ]
+        },
+        primitive: {
+          topology: 'triangle-strip',
+          stripIndexFormat: undefined
+        }
+      });
+    } catch (error: unknown) {
+      // Cleanup uniform buffer if pipeline creation failed
+      uniformBuffer?.destroy();
+      throw error;
+    }
 
     const effectName: string = `${options.shaderName}_${++this.effectCounter}`;
     
@@ -267,8 +274,11 @@ export class ScreenPass {
     }
 
     // Validate intermediate textures for multi-effect stacks
-    if (effectNames.length > 1 && intermediateTextures.length < 2) {
-      console.warn('executeStack requires at least 2 intermediate textures for multiple effects');
+    // For 2 effects: need 1 intermediate (effect 0 → intermediate, effect 1 → finalTarget)
+    // For 3+ effects: need 2 intermediates for ping-pong (effect 0 → int[0], effect 1 → int[1], effect 2 → finalTarget)
+    const requiredIntermediates: number = effectNames.length === 2 ? 1 : 2;
+    if (effectNames.length > 1 && intermediateTextures.length < requiredIntermediates) {
+      console.warn(`executeStack requires at least ${requiredIntermediates} intermediate texture(s) for ${effectNames.length} effects`);
       // Fallback: execute only the first effect
       this.execute(commandEncoder, effectNames[0], sourceTexture, finalTarget);
       return;
