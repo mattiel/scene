@@ -69,11 +69,6 @@ export class RAFScheduler {
     // Sort callbacks by priority whenever we add one
     this.sortCallbacks();
     
-    // Auto-start if not running
-    if (!this.isRunning) {
-      this.start();
-    }
-    
     return id;
   }
 
@@ -182,7 +177,12 @@ export class RAFScheduler {
 
     // Execute callbacks in priority order
     // Note: callbacks are already sorted by priority
-    for (const scheduled of this.callbacks.values()) {
+    // Create snapshot to avoid iterator invalidation if callbacks call add()
+    const snapshot = Array.from(this.callbacks.values());
+    for (const scheduled of snapshot) {
+      // Verify callback still exists (might have been removed during iteration)
+      if (!this.callbacks.has(scheduled.id)) continue;
+      
       try {
         scheduled.callback(deltaTime, timestamp);
       } catch (error) {

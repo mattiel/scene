@@ -43,6 +43,7 @@ export class Engine {
   private _events: EventBus;
   private _scheduler: RAFScheduler;
   private _isReady: boolean = false;
+  private _resizeObserver: ResizeObserver | null = null;
   
   // Subsystem registries (will be populated by other packages)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -249,14 +250,19 @@ export class Engine {
   private setupResizeObserver(): void {
     if (!this._canvas) return;
     
-    const observer = new ResizeObserver((entries) => {
+    // Disconnect existing observer to prevent multiple observers
+    if (this._resizeObserver) {
+      this._resizeObserver.disconnect();
+    }
+    
+    this._resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
         const { width, height } = entry.contentRect;
         this._events.emit('resize', { width, height });
       }
     });
     
-    observer.observe(this._canvas);
+    this._resizeObserver.observe(this._canvas);
   }
 
   /**
@@ -330,6 +336,12 @@ export class Engine {
    * Destroy the engine and clean up resources
    */
   destroy(): void {
+    // Disconnect resize observer
+    if (this._resizeObserver) {
+      this._resizeObserver.disconnect();
+      this._resizeObserver = null;
+    }
+    
     this._scheduler.clear();
     this._events.clear();
     this._surfaces.clear();
