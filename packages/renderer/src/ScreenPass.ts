@@ -212,21 +212,22 @@ export class ScreenPass {
 
   /**
    * Execute a screen pass effect
+   * @returns true if the effect was executed, false if skipped (not initialized or effect not found)
    */
   execute(
     commandEncoder: GPUCommandEncoder,
     effectName: string,
     sourceTexture: GPUTexture,
     targetTexture?: GPUTexture
-  ): void {
+  ): boolean {
     if (!this.initialized) {
-      return;
+      return false;
     }
 
     const effect: ScreenPassEffect | undefined = this.effects.get(effectName);
     if (!effect) {
       console.warn(`Effect ${effectName} not found`);
-      return;
+      return false;
     }
 
     const context: GPUCanvasContext = this.gpuContext.context!;
@@ -251,6 +252,8 @@ export class ScreenPass {
     passEncoder.setBindGroup(0, bindGroup);
     passEncoder.draw(4, 1, 0, 0); // Draw fullscreen quad
     passEncoder.end();
+
+    return true;
   }
 
   /**
@@ -293,8 +296,12 @@ export class ScreenPass {
         ? (finalTarget || this.gpuContext.context!.getCurrentTexture())
         : intermediateTextures[i % intermediateTextures.length];
 
-      this.execute(commandEncoder, effectNames[i], currentSource, target);
-      currentSource = target;
+      const executed: boolean = this.execute(commandEncoder, effectNames[i], currentSource, target);
+      // Only update currentSource if the effect actually rendered to the target
+      // This prevents subsequent effects from reading uninitialized texture data
+      if (executed) {
+        currentSource = target;
+      }
     }
   }
 
