@@ -163,13 +163,18 @@ export class ScreenPass {
    * Update uniform data for an effect
    */
   updateUniform(effectName: string, data: Float32Array): void {
+    if (!this.initialized || !this.gpuContext.device) {
+      console.warn('ScreenPass: Cannot update uniform - not initialized or device unavailable');
+      return;
+    }
+
     const effect: ScreenPassEffect | undefined = this.effects.get(effectName);
     if (!effect || !effect.uniformBuffer) {
       console.warn(`Effect ${effectName} not found or has no uniform buffer`);
       return;
     }
 
-    const device: GPUDevice = this.gpuContext.device!;
+    const device: GPUDevice = this.gpuContext.device;
     device.queue.writeBuffer(effect.uniformBuffer, 0, data.buffer, data.byteOffset, data.byteLength);
   }
 
@@ -266,6 +271,10 @@ export class ScreenPass {
     intermediateTextures: GPUTexture[],
     finalTarget?: GPUTexture
   ): void {
+    if (!this.initialized || !this.gpuContext.context) {
+      return;
+    }
+
     if (effectNames.length === 0) {
       return;
     }
@@ -309,6 +318,10 @@ export class ScreenPass {
    * Create an intermediate render texture
    */
   createIntermediateTexture(width: number, height: number): GPUTexture {
+    if (!this.initialized) {
+      throw new Error('ScreenPass not initialized');
+    }
+
     const device: GPUDevice = this.gpuContext.device!;
     const format: GPUTextureFormat = this.gpuContext.format!;
 
