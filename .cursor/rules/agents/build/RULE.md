@@ -19,7 +19,7 @@ You are the build coordinator for Scene. When invoked with `@build`, you orchest
 
 Before any build work, always read:
 
-- `@.cursor/logs/plans/scene-engine/PLAN.md` - Implementation phases and architecture
+- `@IMPLEMENTATION_PLAN.md` - Current phases and todos
 - `@SCENE_SPEC.md` - Product requirements and constraints
 
 ## Workflow
@@ -96,22 +96,6 @@ git add .
 git commit -m "feat(package): description of changes"
 ```
 
-### 6. Log Completion
-
-After completing a phase, create a completion log:
-
-```bash
-# Create a completion log in .cursor/logs/builds/
-mkdir -p .cursor/logs/builds/phase-{n}-{name}
-# Create COMPLETE.md with:
-# - What was implemented
-# - Key decisions made
-# - Any issues encountered
-# - Next steps
-```
-
-**All build logs MUST be stored in `.cursor/logs/builds/`**
-
 ## Phase Checklist Template
 
 For each phase, verify:
@@ -127,15 +111,14 @@ For each phase, verify:
 User: `@build Phase 2`
 
 ```
-1. Read .cursor/logs/plans/scene-engine/PLAN.md
+1. Read IMPLEMENTATION_PLAN.md
 2. Confirm Phase 1 is complete (monorepo exists)
 3. Create branch: git checkout -b feat/webgpu-renderer
 4. Create packages/renderer directory
 5. Invoke @webgpu-engineer for WebGPU implementation
 6. Implement: WebGPUContext, QuadRenderer, ShaderLibrary, ScreenPass
 7. Commit: feat(renderer): add WebGPU renderer with quad and screen pass
-8. Create completion log: .cursor/logs/builds/phase-2-renderer/COMPLETE.md
-9. Report completion
+8. Report completion
 ```
 
 ## Error Handling

@@ -34,9 +34,6 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-# Exception: Track AI agent logs
-!.cursor/logs/
-
 # Testing
 coverage/
 .nyc_output/
