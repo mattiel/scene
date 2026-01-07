@@ -246,7 +246,7 @@ export class QuadRenderer {
     bindGroup: GPUBindGroup,
     options: QuadRenderOptions = {}
   ): void {
-    if (!this.initialized || !this.pipeline) {
+    if (!this.initialized || !this.pipeline || !this.gpuContext.context) {
       return;
     }
 
@@ -280,7 +280,7 @@ export class QuadRenderer {
     commandEncoder: GPUCommandEncoder,
     options: QuadRenderOptions = {}
   ): GPURenderPassEncoder | null {
-    if (!this.initialized || !this.pipeline) {
+    if (!this.initialized || !this.pipeline || !this.gpuContext.context) {
       return null;
     }
 

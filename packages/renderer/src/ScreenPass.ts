@@ -234,7 +234,7 @@ export class ScreenPass {
     sourceTexture: GPUTexture,
     targetTexture?: GPUTexture
   ): boolean {
-    if (!this.initialized) {
+    if (!this.initialized || !this.gpuContext.context) {
       return false;
     }
 
