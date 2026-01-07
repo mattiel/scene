@@ -1,0 +1,44 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "ui": "tui",
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "inputs": ["src/**", "package.json", "tsconfig.json", "vite.config.ts"],
+      "outputs": ["dist/**"],
+      "outputLogs": "new-only"
+    },
+    "dev": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "persistent": true,
+      "outputLogs": "full"
+    },
+    "typecheck": {
+      "dependsOn": ["^build"],
+      "inputs": ["src/**", "tsconfig.json"],
+      "outputLogs": "new-only"
+    },
+    "lint": {
+      "dependsOn": ["^build"],
+      "inputs": ["src/**", ".eslintrc.js", "eslint.config.js"],
+      "outputLogs": "new-only"
+    },
+    "format": {
+      "inputs": ["src/**", ".prettierrc"],
+      "outputLogs": "new-only"
+    },
+    "clean": {
+      "cache": false,
+      "outputLogs": "full"
+    }
+  },
+  "globalDependencies": [
+    ".env",
+    "tsconfig.json",
+    "pnpm-workspace.yaml"
+  ],
+  "globalEnv": [
+    "NODE_ENV"
+  ]
+}
