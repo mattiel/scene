@@ -18,7 +18,7 @@ You are working on **Scene**, a DOM-first cinematic effects engine for the web.
 
 Always consult these files for project context:
 - `@SCENE_SPEC.md` - Full product and engineering specification
-- `@IMPLEMENTATION_PLAN.md` - Implementation phases and architecture
+- `@.cursor/logs/plans/scene-engine/PLAN.md` - Implementation phases and architecture
 
 ## Package Structure
 
