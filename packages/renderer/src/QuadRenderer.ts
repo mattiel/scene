@@ -216,15 +216,19 @@ export class QuadRenderer {
    * Create a bind group for a texture
    */
   createBindGroup(texture: GPUTexture): GPUBindGroup {
-    const device: GPUDevice = this.gpuContext.device!;
+    if (!this.initialized || !this.pipeline || !this.sampler || !this.gpuContext.device) {
+      throw new Error('QuadRenderer not initialized');
+    }
+
+    const device: GPUDevice = this.gpuContext.device;
 
     return device.createBindGroup({
       label: 'Quad Texture Bind Group',
-      layout: this.pipeline!.getBindGroupLayout(0),
+      layout: this.pipeline.getBindGroupLayout(0),
       entries: [
         {
           binding: 0,
-          resource: this.sampler!
+          resource: this.sampler
         },
         {
           binding: 1,
