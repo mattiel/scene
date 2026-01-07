@@ -28,6 +28,7 @@ export class ScreenPass {
   private sampler: GPUSampler | null;
   private effects: Map<string, ScreenPassEffect>;
   private initialized: boolean;
+  private effectCounter: number;
 
   constructor(gpuContext: WebGPUContext, shaderLibrary: ShaderLibrary) {
     this.gpuContext = gpuContext;
@@ -35,6 +36,7 @@ export class ScreenPass {
     this.sampler = null;
     this.effects = new Map();
     this.initialized = false;
+    this.effectCounter = 0;
   }
 
   /**
@@ -138,7 +140,7 @@ export class ScreenPass {
       }
     });
 
-    const effectName: string = `${options.shaderName}_${Date.now()}`;
+    const effectName: string = `${options.shaderName}_${++this.effectCounter}`;
     
     this.effects.set(effectName, {
       name: options.shaderName,
