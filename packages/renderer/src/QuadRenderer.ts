@@ -56,6 +56,12 @@ export class QuadRenderer {
     }
 
     try {
+      // initialize() can be called multiple times (e.g. renderer re-creation).
+      // Ensure we tear down previously-created GPU buffers to avoid leaks.
+      if (this.initialized || this.vertexBuffer || this.indexBuffer || this.pipeline || this.sampler) {
+        this.cleanup();
+      }
+
       this.createBuffers();
       this.createSampler();
       this.createPipeline();
@@ -74,6 +80,13 @@ export class QuadRenderer {
    */
   private createBuffers(): void {
     const device: GPUDevice = this.gpuContext.device!;
+
+    // Defensive: if buffers already exist, destroy them before recreating.
+    // (cleanup() should normally handle this, but keep createBuffers() safe.)
+    this.vertexBuffer?.destroy();
+    this.indexBuffer?.destroy();
+    this.vertexBuffer = null;
+    this.indexBuffer = null;
 
     // Quad vertices (position + texCoord)
     // Triangle strip: top-left, top-right, bottom-left, bottom-right

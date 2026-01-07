@@ -37,6 +37,28 @@ export class WebGPUContext {
   }
 
   /**
+   * Best-effort teardown of existing GPU state.
+   * WebGPU resources are finite; re-initialization must not leak.
+   */
+  private teardownExistingResources(): void {
+    // Unconfigure the canvas context if supported (releases swapchain resources).
+    try {
+      (this.state.context as unknown as { unconfigure?: () => void } | null)?.unconfigure?.();
+    } catch {
+      // Ignore; unconfigure is not universally implemented.
+    }
+
+    // Destroy the device to release GPU allocations.
+    if (this.state.device) {
+      try {
+        this.state.device.destroy();
+      } catch {
+        // Ignore double-destroy / already-lost device edge cases.
+      }
+    }
+  }
+
+  /**
    * Check if WebGPU is available in the current environment
    */
   static async checkAvailability(): Promise<boolean> {
@@ -62,6 +84,20 @@ export class WebGPUContext {
    * Initialize WebGPU context with the provided canvas
    */
   async initialize(options: WebGPUContextOptions): Promise<boolean> {
+    // If initialize() is called multiple times on the same instance, ensure we
+    // tear down any previously-created GPU resources to avoid leaks.
+    if (this.state.device || this.state.context) {
+      this.teardownExistingResources();
+      this.state = {
+        isAvailable: false,
+        adapter: null,
+        device: null,
+        context: null,
+        format: null,
+        canvas: options.canvas
+      };
+    }
+
     // Check if WebGPU is available
     if (!navigator.gpu) {
       console.warn('WebGPU is not supported - Scene will run in degraded mode');
@@ -88,6 +124,9 @@ export class WebGPUContext {
 
       // Handle device lost
       device.lost.then((info: GPUDeviceLostInfo) => {
+        // Avoid clobbering state if this instance has been re-initialized with
+        // a different device since this handler was registered.
+        if (this.state.device !== device) return;
         console.error(`WebGPU device lost: ${info.message}`);
         this.state.isAvailable = false;
         // Emit error event if EventBus is available
@@ -211,9 +250,7 @@ export class WebGPUContext {
    * Cleanup and destroy the context
    */
   destroy(): void {
-    if (this.state.device) {
-      this.state.device.destroy();
-    }
+    this.teardownExistingResources();
 
     this.state = {
       isAvailable: false,
