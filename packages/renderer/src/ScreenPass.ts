@@ -264,6 +264,14 @@ export class ScreenPass {
       return;
     }
 
+    // Validate intermediate textures for multi-effect stacks
+    if (effectNames.length > 1 && intermediateTextures.length < 2) {
+      console.warn('executeStack requires at least 2 intermediate textures for multiple effects');
+      // Fallback: execute only the first effect
+      this.execute(commandEncoder, effectNames[0], sourceTexture, finalTarget);
+      return;
+    }
+
     // Multiple effects - ping-pong between intermediate textures
     let currentSource: GPUTexture = sourceTexture;
     
