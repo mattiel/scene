@@ -19,7 +19,7 @@ You are the build coordinator for Scene. When invoked with `@build`, you orchest
 
 Before any build work, always read:
 
-- `@IMPLEMENTATION_PLAN.md` - Current phases and todos
+- `@.cursor/logs/plans/scene-engine/PLAN.md` - Implementation phases and architecture
 - `@SCENE_SPEC.md` - Product requirements and constraints
 
 ## Workflow
@@ -96,6 +96,62 @@ git add .
 git commit -m "feat(package): description of changes"
 ```
 
+### 6. Organize Test Files
+
+When creating test HTML files during development, organize them properly:
+
+```bash
+# Create test directory structure in the package
+mkdir -p packages/{package-name}/tests/
+
+# Move or create test files with descriptive names
+packages/{package-name}/tests/
+  basic-usage.html           # Simple usage example
+  feature-{name}.html        # Feature-specific tests
+  bug-fix-{issue}.html       # Bug reproduction/verification
+  performance-{metric}.html  # Performance testing
+```
+
+**Test File Naming Rules:**
+- Use descriptive names that explain what is being tested
+- Group related tests in subdirectories if needed
+- Include comments in HTML explaining the test purpose
+- Bad: `test.html`, `test2.html`, `new-test.html`
+- Good: `basic-quad-rendering.html`, `multi-effect-stack.html`, `memory-leak-verification.html`
+
+**Example Structure:**
+```
+packages/renderer/
+  tests/
+    basic/
+      quad-rendering.html
+      shader-compilation.html
+    effects/
+      single-effect.html
+      multi-effect-stack.html
+      effect-collision.html
+    diagnostics/
+      memory-leak-check.html
+      gpu-context-recovery.html
+```
+
+### 7. Log Completion
+
+After completing a phase, create a completion log:
+
+```bash
+# Create a completion log in .cursor/logs/builds/
+mkdir -p .cursor/logs/builds/phase-{n}-{name}
+# Create COMPLETE.md with:
+# - What was implemented
+# - Key decisions made
+# - Any issues encountered
+# - Test files created and their locations
+# - Next steps
+```
+
+**All build logs MUST be stored in `.cursor/logs/builds/`**
+
 ## Phase Checklist Template
 
 For each phase, verify:
@@ -111,14 +167,17 @@ For each phase, verify:
 User: `@build Phase 2`
 
 ```
-1. Read IMPLEMENTATION_PLAN.md
+1. Read .cursor/logs/plans/scene-engine/PLAN.md
 2. Confirm Phase 1 is complete (monorepo exists)
 3. Create branch: git checkout -b feat/webgpu-renderer
 4. Create packages/renderer directory
 5. Invoke @webgpu-engineer for WebGPU implementation
 6. Implement: WebGPUContext, QuadRenderer, ShaderLibrary, ScreenPass
-7. Commit: feat(renderer): add WebGPU renderer with quad and screen pass
-8. Report completion
+7. Create test directory: mkdir -p packages/renderer/tests/basic
+8. Create test files with descriptive names in tests/ directory
+9. Commit: feat(renderer): add WebGPU renderer with quad and screen pass
+10. Create completion log: .cursor/logs/builds/phase-2-renderer/COMPLETE.md
+11. Report completion
 ```
 
 ## Error Handling

@@ -14,6 +14,7 @@ You are responsible for creating, refining, and maintaining Cursor rules and age
 - Ensuring rules follow Cursor's official standards
 - Optimizing rules for clarity and effectiveness
 - Managing rule metadata and application patterns
+- **Checking rule integrity** - Verifying rules are consistent and properly structured
 
 ## Official Documentation
 
@@ -63,6 +64,54 @@ Specialist agents for specific domains. Each agent has its own directory:
 - `a11y-engineer/` - Accessibility specialist
 - `build/` - Build orchestrator
 - `agent-ruler/` - Rule and agent definition specialist (this agent)
+
+### `.cursor/logs/` - Agent Logs and Implementation Plans
+
+**All implementation plans, task logs, and other AI agent artifacts MUST live in `.cursor/logs/`**
+
+The logs directory is structured by artifact type:
+
+```
+.cursor/logs/
+  plans/              # Implementation plans
+    {feature-name}/
+      PLAN.md
+      UPDATES.md
+  builds/             # Build logs and progress tracking
+    phase-{n}/
+      LOG.md
+  tasks/              # Task-specific logs
+    {task-name}/
+      LOG.md
+  migrations/         # Migration logs and notes
+    {migration-name}/
+      LOG.md
+```
+
+**Critical Rules for Agent Artifacts:**
+
+1. **Never create logs in project root** - Files like `IMPLEMENTATION_PLAN.md`, `PHASE1_COMPLETE.md` must be moved to `.cursor/logs/`
+2. **Use descriptive folder names** - Each artifact gets its own folder with a clear name
+3. **Maintain log history** - Don't overwrite; use `UPDATES.md` or append with timestamps
+4. **Structure for future scale** - More plans and logs will be created; folder structure prevents clutter
+
+**Example:**
+```
+.cursor/logs/
+  plans/
+    scene-engine/
+      PLAN.md                    # Original implementation plan
+      UPDATES.md                 # Updates and revisions
+    webgpu-renderer/
+      PLAN.md
+  builds/
+    phase-1-foundation/
+      LOG.md
+      COMPLETE.md
+  tasks/
+    refactor-scheduler/
+      LOG.md
+```
 
 ## Rule Types
 
@@ -356,13 +405,54 @@ You:
 User: Create a rule for API design standards
 
 You:
-1. Determine this is project-wide (not agent-specific)
-2. Create .cursor/rules/api-standards/RULE.md
-3. Add frontmatter with globs: "**/*.api.ts"
-4. Document REST conventions, error handling, versioning
-5. Provide concrete API examples
-6. Reference OpenAPI specs if applicable
+
+## Rule Integrity Checking
+
+When asked to check rule integrity, verify the following:
+
+### 1. Structure Validation
+- All RULE.md files have valid YAML frontmatter with `---` delimiters
+- Required fields present: `description` (string), `alwaysApply` (boolean)
+- Optional fields valid if present: `globs` (string pattern)
+- No orphaned directories without RULE.md files
+
+### 2. Cross-Reference Validation
+- All `@file.md` references point to existing files
+- Agent invocations (`@agent-name`) reference existing agents
+- Path references in documentation are accurate
+- No broken links to moved or renamed files
+
+### 3. Content Validation
+- No duplicate agent names across directories
+- Consistent naming conventions (kebab-case for directories)
+- No conflicting guidance between rules
+- Test file references match actual test locations
+
+### 4. Project Structure Compliance
+- Agent artifacts live in `.cursor/logs/`, not project root
+- Test files organized in `packages/{name}/tests/`, not package root
+- Documentation files follow naming conventions (RULE.md, README.md, PLAN.md)
+
+### Integrity Check Workflow
+
+```bash
+# When asked to check integrity:
+1. List all .cursor/rules/ directories
+2. Verify each RULE.md has valid frontmatter
+3. Check all cross-references resolve
+4. Verify no misplaced files (logs in root, tests scattered)
+5. Report any issues found with specific paths and fixes
 ```
+
+### Common Integrity Issues
+
+| Issue | Detection | Fix |
+|-------|-----------|-----|
+| Missing frontmatter | RULE.md doesn't start with `---` | Add valid YAML frontmatter |
+| Broken @-reference | Referenced file doesn't exist | Update path or create file |
+| Misplaced log file | .md file in project root | Move to `.cursor/logs/{type}/` |
+| Scattered test files | test*.html in package root | Move to `tests/` subdirectory |
+| Orphaned agent dir | Directory without RULE.md | Add RULE.md or remove dir |
 
 ## Invocation
 
@@ -375,3 +465,5 @@ Invoke `@agent-ruler` when:
 - Optimizing rule effectiveness
 - Ensuring rules follow Cursor's official standards
 - Converting between rule types (project → agent, etc.)
+- **Checking rule and project integrity**
+- **Reorganizing misplaced files (tests, logs, docs)**
