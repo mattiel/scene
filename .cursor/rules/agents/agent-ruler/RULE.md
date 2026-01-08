@@ -183,13 +183,40 @@ Explanation with code example...
 // Pattern code
 \```
 
-## Testing/Verification
+## Error Handling
 
-- Checklist item 1
-- Checklist item 2
+Domain-specific error handling patterns:
+
+\```typescript
+class DomainError extends Error {
+  constructor(message: string, public readonly cause?: unknown) {
+    super(message);
+    this.name = 'DomainError';
+  }
+}
+\```
+
+## When to Invoke
+
+Invoke @{agent-name} when:
+- Trigger scenario 1
+- Trigger scenario 2
+- Trigger scenario 3
+
+## Testing Checklist
+
+- [ ] Functionality test 1
+- [ ] Functionality test 2
+- [ ] Error handling test
+- [ ] Performance test (if applicable)
 ```
 
-**Note:** All agents automatically follow the standards defined in `@agent-standards`, including output attribution guidelines. You don't need to repeat these in individual agent files.
+**Note:** All agents automatically follow the standards defined in `@agent-standards`, including:
+- Output attribution guidelines
+- Orchestration communication protocols
+- Cross-references to project rules (`@typescript`, `@efficiency`, `@git-workflow`)
+
+You don't need to repeat these in individual agent files.
 
 ## Common Patterns
 
@@ -320,56 +347,11 @@ When invoked by an orchestrator, you will be announced with:
 
 ## Agent Orchestration Communication
 
-When agents are invoked by orchestrators (like `@build`), they should be announced to provide transparency. See `@agent-standards` for the full standards that all agents follow.
+When agents are invoked by orchestrators (like `@build`), they should be announced to provide transparency.
 
-### Announcement Format
+All orchestration communication standards are defined in `@agent-standards`, including:
+- Announcement format and rules
+- Canonical agent names reference
+- Single and multi-agent invocation examples
 
-```
-🕵️‍♂️ Agent [Agent Name] started working on [descriptive-task-name]
-```
-
-### Key Principles
-
-1. **Always Announce:** Every agent invocation must be announced before the @-mention
-2. **Be Specific:** Task names should describe actual work, not generic labels
-3. **Multiple Agents:** When multiple agents work on a task, announce each one separately
-4. **Sequential Clarity:** When one agent hands off to another, the new announcement marks the transition
-
-### Examples
-
-**Single Agent Invocation:**
-```
-User: @build implement Phase 2
-
-Build Orchestrator responds:
-🕵️‍♂️ Agent WebGPU Engineer started working on WebGPU renderer implementation.
-
-@webgpu-engineer please implement...
-```
-
-**Multiple Agents in Sequence:**
-```
-User: @build implement Phase 8 carousel demo
-
-Build Orchestrator responds:
-🕵️‍♂️ Agent WebGPU Engineer started working on carousel screen effects.
-
-@webgpu-engineer implement blur and vignette effects for carousel...
-
-[After completion]
-
-🕵️‍♂️ Agent Surface Engineer started working on carousel surface tracking.
-
-@surface-engineer set up surface management for carousel items...
-```
-
-### Agent Names Reference
-
-| Agent File | Display Name | Typical Task Examples |
-|------------|--------------|----------------------|
-| `@webgpu-engineer` | WebGPU Engineer | "WebGPU renderer implementation", "shader optimization", "render pipeline setup" |
-| `@surface-engineer` | Surface Engineer | "surface tracking", "DOM synchronization", "ghost surface animation" |
-| `@input-engineer` | Input Engineer | "pointer input handling", "picking implementation", "inertia physics" |
-| `@a11y-engineer` | Accessibility Engineer | "DOM mirrors", "keyboard navigation", "screen reader support" |
-| `@agent-ruler` | Agent Ruler | "creating agent definition", "refining rules", "updating templates", "checking rule integrity" |
-| `@build` | Build Orchestrator | N/A (orchestrator announces others) |
+When creating or updating agents, ensure they follow the naming conventions in `@agent-standards`.

@@ -105,3 +105,115 @@ For post-processing effects:
 3. Final pass renders to canvas
 
 Common effects: blur, vignette, chromatic aberration, distortion, noise.
+
+## Device Loss Recovery
+
+Handle GPU device loss gracefully:
+
+```typescript
+device.lost.then((info) => {
+  console.error('WebGPU device lost:', info.message);
+  
+  if (info.reason === 'destroyed') {
+    // Intentional destruction, don't recover
+    return;
+  }
+  
+  // Attempt recovery
+  this.reinitialize();
+});
+
+async reinitialize(): Promise<void> {
+  // Release old resources
+  this.destroy();
+  
+  // Request new device
+  const adapter = await navigator.gpu.requestAdapter();
+  if (!adapter) throw new Error('Failed to get adapter on recovery');
+  
+  this.device = await adapter.requestDevice();
+  this.recreatePipelines();
+  this.recreateBuffers();
+}
+```
+
+## Texture Format Guidelines
+
+| Use Case | Recommended Format |
+|----------|-------------------|
+| Color attachments | `rgba8unorm` |
+| Canvas matching | `bgra8unorm` (check `context.getPreferredFormat()`) |
+| Depth buffers | `depth24plus` or `depth32float` |
+| HDR rendering | `rgba16float` |
+| Storage textures | `rgba8unorm` or `rgba32float` |
+
+## Memory Budget
+
+- Track texture and buffer allocations
+- Release resources promptly when no longer needed
+- Use texture atlases for small textures
+- Pool frequently created/destroyed buffers
+
+```typescript
+class ResourceTracker {
+  private allocatedBytes = 0;
+  private readonly budgetBytes = 256 * 1024 * 1024; // 256MB default
+  
+  canAllocate(bytes: number): boolean {
+    return this.allocatedBytes + bytes <= this.budgetBytes;
+  }
+}
+```
+
+## Debug and Profiling
+
+### Error Scope Isolation
+
+```typescript
+device.pushErrorScope('validation');
+
+// Potentially problematic operations
+const buffer = device.createBuffer({ ... });
+
+device.popErrorScope().then((error) => {
+  if (error) {
+    console.error('Validation error:', error.message);
+  }
+});
+```
+
+### GPU Timing (if available)
+
+```typescript
+// Check for timestamp query support
+const features = adapter.features;
+if (features.has('timestamp-query')) {
+  // Create timestamp query set for profiling
+}
+```
+
+### Browser Tools
+
+- Chrome: `chrome://gpu` for GPU info
+- Firefox: `about:support` for WebGL/WebGPU info
+- Use browser DevTools Performance panel for frame timing
+
+## When to Invoke
+
+Invoke `@webgpu-engineer` when:
+- Initializing WebGPU context or managing device lifecycle
+- Writing or optimizing WGSL shaders
+- Creating render pipelines or bind groups
+- Implementing post-processing effects
+- Debugging GPU-related issues
+- Optimizing rendering performance
+
+## Testing Checklist
+
+- [ ] WebGPU context initializes without errors
+- [ ] Graceful fallback when WebGPU unavailable
+- [ ] Device loss recovery works correctly
+- [ ] No validation errors in error scopes
+- [ ] Textures use appropriate formats
+- [ ] Resources released on destroy
+- [ ] Frame time stays under 16ms for 60fps

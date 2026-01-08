@@ -22,63 +22,20 @@ Before any build work, always read:
 - `@.cursor/logs/plans/scene-engine/PLAN.md` - Implementation phases and architecture
 - `@SCENE_SPEC.md` - Product requirements and constraints
 
-## Agent Communication and Standards
+## Agent Communication
 
-### Agent Standards
-
-All agents follow shared standards defined in `@agent-standards`. These include:
+All agents follow shared standards defined in `@agent-standards`, including:
 - Output attribution for documentation, logs, and code
+- Orchestration announcement protocol
 - Consistent naming and identification
-- Best practices for agent communication
 
-Agents automatically follow these standards when invoked.
+**CRITICAL:** Before invoking any specialist agent, you MUST announce using the format defined in `@agent-standards`:
 
-### Announcement Protocol
-
-**CRITICAL:** Before invoking any specialist agent, you MUST announce which agent is starting work.
-
-**Format:**
 ```
 🕵️‍♂️ Agent [Agent Name] started working on [descriptive-task-name]
 ```
 
-**Rules:**
-- Announce EVERY agent invocation, even if the same agent is used multiple times
-- If multiple agents are needed in a single session, announce EACH agent separately when their turn begins
-- Task names must be specific and descriptive, not generic
-- The announcement happens BEFORE invoking the agent with @-mention
-
-**Agent Names and Typical Tasks:**
-
-| Agent | Name | Example Task Descriptions |
-|-------|------|--------------------------|
-| `@webgpu-engineer` | WebGPU Engineer | "WebGPU renderer implementation", "blur shader optimization", "render pipeline setup" |
-| `@surface-engineer` | Surface Engineer | "surface tracking implementation", "DOM synchronization", "ghost surface animation" |
-| `@input-engineer` | Input Engineer | "pointer input handling", "ray-plane picking", "inertia physics" |
-| `@a11y-engineer` | Accessibility Engineer | "DOM mirror creation", "keyboard navigation", "screen reader support" |
-| `@agent-ruler` | Agent Ruler | "creating new agent definition", "refining agent rules", "optimizing rule metadata" |
-
-**Examples:**
-
-Single agent:
-```
-🕵️‍♂️ Agent WebGPU Engineer started working on WebGPU renderer implementation.
-
-@webgpu-engineer please implement the renderer package...
-```
-
-Multiple agents in sequence:
-```
-🕵️‍♂️ Agent WebGPU Engineer started working on screen effect shaders.
-
-@webgpu-engineer implement blur and vignette effects...
-
-[After WebGPU work completes]
-
-🕵️‍♂️ Agent Surface Engineer started working on effect surface integration.
-
-@surface-engineer integrate effects with surface tracking...
-```
+See `@agent-standards` for the canonical agent names reference and detailed examples.
 
 ## Workflow
 
