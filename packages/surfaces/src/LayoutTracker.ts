@@ -135,7 +135,17 @@ export class LayoutTracker {
       );
     }
     
-    // Track all existing surfaces
+    // Observe elements that were tracked before start() was called.
+    // This handles the case where surfaces were added to the registry
+    // before start() - trackSurface ran but couldn't attach observers.
+    for (const element of this._trackedElements.keys()) {
+      this._resizeObserver.observe(element);
+      if (this._intersectionObserver) {
+        this._intersectionObserver.observe(element);
+      }
+    }
+    
+    // Track any existing surfaces not yet tracked (e.g., added during observer creation)
     this._registry.forEach(surface => this.trackSurface(surface));
   }
 
