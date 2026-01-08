@@ -1,0 +1,39 @@
+{
+  "name": "@scene/surfaces",
+  "version": "0.0.1",
+  "description": "Surface system for Scene - DOM element tracking and GPU representation",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite build --watch",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext .ts",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "clean": "rm -rf dist .turbo node_modules/.vite"
+  },
+  "keywords": [
+    "scene",
+    "surfaces",
+    "layout",
+    "tracking"
+  ],
+  "author": "Mattie Lee",
+  "license": "MIT",
+  "dependencies": {
+    "@scene/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@webgpu/types": "^0.1.52",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.7",
+    "vite-plugin-dts": "^4.4.0"
+  }
+}
