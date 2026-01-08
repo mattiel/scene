@@ -13,9 +13,9 @@ export class SurfaceRegistry {
   private _sortedSurfaces: Surface[] = [];
   private _needsSort: boolean = false;
   
-  // Callbacks for lifecycle events
-  private _onAdd?: (surface: Surface) => void;
-  private _onRemove?: (surface: Surface) => void;
+  // Callbacks for lifecycle events (supports multiple subscribers)
+  private _onAddCallbacks: Set<(surface: Surface) => void> = new Set();
+  private _onRemoveCallbacks: Set<(surface: Surface) => void> = new Set();
 
   /**
    * Add a surface to the registry
@@ -31,8 +31,9 @@ export class SurfaceRegistry {
     this._sortedSurfaces.push(surface);
     this._needsSort = true;
     
-    if (this._onAdd) {
-      this._onAdd(surface);
+    // Notify all subscribers
+    for (const callback of this._onAddCallbacks) {
+      callback(surface);
     }
   }
 
@@ -54,8 +55,9 @@ export class SurfaceRegistry {
       this._sortedSurfaces.splice(index, 1);
     }
     
-    if (this._onRemove) {
-      this._onRemove(surface);
+    // Notify all subscribers
+    for (const callback of this._onRemoveCallbacks) {
+      callback(surface);
     }
     
     return surface;
@@ -172,9 +174,9 @@ export class SurfaceRegistry {
    * @returns Unsubscribe function
    */
   onAdd(callback: (surface: Surface) => void): () => void {
-    this._onAdd = callback;
+    this._onAddCallbacks.add(callback);
     return () => {
-      this._onAdd = undefined;
+      this._onAddCallbacks.delete(callback);
     };
   }
 
@@ -184,19 +186,23 @@ export class SurfaceRegistry {
    * @returns Unsubscribe function
    */
   onRemove(callback: (surface: Surface) => void): () => void {
-    this._onRemove = callback;
+    this._onRemoveCallbacks.add(callback);
     return () => {
-      this._onRemove = undefined;
+      this._onRemoveCallbacks.delete(callback);
     };
   }
 
   /**
    * Clear all surfaces and destroy them
+   * 
+   * Note: This preserves onAdd/onRemove callbacks. Subscribers (like LayoutTracker)
+   * remain active and will be notified of surfaces added after clear().
+   * Use the unsubscribe functions returned by onAdd()/onRemove() to remove callbacks.
    */
   clear(): void {
-    // Notify removal callbacks before destroying (allows cleanup like untracking)
-    if (this._onRemove) {
-      this._surfaces.forEach(surface => this._onRemove!(surface));
+    // Notify all removal callbacks before destroying (allows cleanup like untracking)
+    for (const callback of this._onRemoveCallbacks) {
+      this._surfaces.forEach(surface => callback(surface));
     }
     
     // Destroy all surfaces
@@ -207,9 +213,9 @@ export class SurfaceRegistry {
     this._sortedSurfaces = [];
     this._needsSort = false;
     
-    // Clear callbacks
-    this._onAdd = undefined;
-    this._onRemove = undefined;
+    // Note: We intentionally do NOT clear callbacks here.
+    // Subscribers (e.g., LayoutTracker) expect their callbacks to remain active
+    // after clear(). They should call their unsubscribe functions when done.
   }
 
   /**

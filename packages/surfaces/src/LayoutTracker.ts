@@ -48,8 +48,10 @@ export class LayoutTracker {
   private _pendingVisibilityUpdates: Map<string, VisibilityUpdate> = new Map();
   private _rafHandle: number | null = null;
   
-  // Tracked elements
+  // Tracked elements (element → surface for observer callbacks)
   private _trackedElements: Map<HTMLElement, Surface> = new Map();
+  // Reverse mapping (surfaceId → element) for cleanup when surface.element is null
+  private _surfaceElements: Map<string, HTMLElement> = new Map();
   
   // Options
   private _options: Required<LayoutTrackerOptions>;
@@ -151,6 +153,7 @@ export class LayoutTracker {
     
     // Clear tracked elements
     this._trackedElements.clear();
+    this._surfaceElements.clear();
     this._pendingLayoutUpdates.clear();
     this._pendingVisibilityUpdates.clear();
   }
@@ -166,6 +169,8 @@ export class LayoutTracker {
     
     // Add to tracked elements map
     this._trackedElements.set(element, surface);
+    // Store reverse mapping for cleanup (needed if surface.element is nulled before removal)
+    this._surfaceElements.set(surface.id, element);
     
     // Observe with ResizeObserver
     if (this._resizeObserver) {
@@ -182,12 +187,14 @@ export class LayoutTracker {
    * Untrack a surface (called automatically when surfaces are removed)
    */
   private untrackSurface(surface: Surface): void {
-    if (!surface.element) return;
+    // Use the stored element reference, which works even if surface.element is null
+    // (e.g., if surface.destroy() was called before registry.remove())
+    const element = this._surfaceElements.get(surface.id);
+    if (!element) return;
     
-    const element = surface.element;
-    
-    // Remove from tracked elements map
+    // Remove from both maps
     this._trackedElements.delete(element);
+    this._surfaceElements.delete(surface.id);
     
     // Unobserve
     if (this._resizeObserver) {

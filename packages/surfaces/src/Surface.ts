@@ -58,6 +58,7 @@ export class Surface {
   // Callbacks
   private _onLayoutChange?: (rect: SurfaceRect) => void;
   private _onVisibilityChange?: (visible: boolean) => void;
+  private _onZIndexChange?: (zIndex: number) => void;
   
   constructor(
     id: string, 
@@ -144,7 +145,12 @@ export class Surface {
    * Set the z-index
    */
   set zIndex(value: number) {
-    this._zIndex = value;
+    if (this._zIndex !== value) {
+      this._zIndex = value;
+      if (this._onZIndexChange) {
+        this._onZIndexChange(value);
+      }
+    }
   }
 
   /**
@@ -238,6 +244,16 @@ export class Surface {
   }
 
   /**
+   * Subscribe to z-index changes
+   */
+  onZIndexChange(callback: (zIndex: number) => void): () => void {
+    this._onZIndexChange = callback;
+    return () => {
+      this._onZIndexChange = undefined;
+    };
+  }
+
+  /**
    * Capture the element's visual appearance to a texture
    * TODO: This will be implemented when renderer integration is added
    */
@@ -276,6 +292,7 @@ export class Surface {
     // Clear callbacks
     this._onLayoutChange = undefined;
     this._onVisibilityChange = undefined;
+    this._onZIndexChange = undefined;
     
     // Don't destroy the texture here - that's managed by the renderer
     // Just clear the reference
