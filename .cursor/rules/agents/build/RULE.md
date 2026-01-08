@@ -22,6 +22,64 @@ Before any build work, always read:
 - `@.cursor/logs/plans/scene-engine/PLAN.md` - Implementation phases and architecture
 - `@SCENE_SPEC.md` - Product requirements and constraints
 
+## Agent Communication and Standards
+
+### Agent Standards
+
+All agents follow shared standards defined in `@agent-standards`. These include:
+- Output attribution for documentation, logs, and code
+- Consistent naming and identification
+- Best practices for agent communication
+
+Agents automatically follow these standards when invoked.
+
+### Announcement Protocol
+
+**CRITICAL:** Before invoking any specialist agent, you MUST announce which agent is starting work.
+
+**Format:**
+```
+🕵️‍♂️ Agent [Agent Name] started working on [descriptive-task-name]
+```
+
+**Rules:**
+- Announce EVERY agent invocation, even if the same agent is used multiple times
+- If multiple agents are needed in a single session, announce EACH agent separately when their turn begins
+- Task names must be specific and descriptive, not generic
+- The announcement happens BEFORE invoking the agent with @-mention
+
+**Agent Names and Typical Tasks:**
+
+| Agent | Name | Example Task Descriptions |
+|-------|------|--------------------------|
+| `@webgpu-engineer` | WebGPU Engineer | "WebGPU renderer implementation", "blur shader optimization", "render pipeline setup" |
+| `@surface-engineer` | Surface Engineer | "surface tracking implementation", "DOM synchronization", "ghost surface animation" |
+| `@input-engineer` | Input Engineer | "pointer input handling", "ray-plane picking", "inertia physics" |
+| `@a11y-engineer` | Accessibility Engineer | "DOM mirror creation", "keyboard navigation", "screen reader support" |
+| `@agent-ruler` | Agent Ruler | "creating new agent definition", "refining agent rules", "optimizing rule metadata" |
+
+**Examples:**
+
+Single agent:
+```
+🕵️‍♂️ Agent WebGPU Engineer started working on WebGPU renderer implementation.
+
+@webgpu-engineer please implement the renderer package...
+```
+
+Multiple agents in sequence:
+```
+🕵️‍♂️ Agent WebGPU Engineer started working on screen effect shaders.
+
+@webgpu-engineer implement blur and vignette effects...
+
+[After WebGPU work completes]
+
+🕵️‍♂️ Agent Surface Engineer started working on effect surface integration.
+
+@surface-engineer integrate effects with surface tracking...
+```
+
 ## Workflow
 
 ### 1. Assess Current State
@@ -61,20 +119,33 @@ Branch names should describe **what** is being implemented, not just the phase n
 
 ### 3. Invoke Specialist Agents
 
-Based on the phase, invoke the appropriate specialist agent:
+Based on the phase, invoke the appropriate specialist agent. **ALWAYS announce the agent first** using the format in "Agent Communication and Standards" section above.
 
+| Phase   | Agent               | Focus                         | Example Announcement |
+| ------- | ------------------- | ----------------------------- | -------------------- |
+| Phase 1 | (self)              | Monorepo setup, core skeleton | N/A (self-implementation) |
+| Phase 2 | `@webgpu-engineer`  | WebGPU renderer               | "WebGPU renderer implementation" |
+| Phase 3 | `@surface-engineer` | Surface tracking              | "surface tracking system" |
+| Phase 4 | `@webgpu-engineer`  | Screen effects                | "screen effect shaders and pipeline" |
+| Phase 5 | `@input-engineer`   | Input handling                | "pointer input and picking system" |
+| Phase 6 | (self)              | Navigation coordination       | N/A (self-implementation) |
+| Phase 7 | `@a11y-engineer`    | Accessibility                 | "accessibility DOM mirrors and keyboard nav" |
+| Phase 8 | (all)               | Carousel demo                 | Multiple announcements for each agent |
 
-| Phase   | Agent               | Focus                         |
-| ------- | ------------------- | ----------------------------- |
-| Phase 1 | (self)              | Monorepo setup, core skeleton |
-| Phase 2 | `@webgpu-engineer`  | WebGPU renderer               |
-| Phase 3 | `@surface-engineer` | Surface tracking              |
-| Phase 4 | `@webgpu-engineer`  | Screen effects                |
-| Phase 5 | `@input-engineer`   | Input handling                |
-| Phase 6 | (self)              | Navigation coordination       |
-| Phase 7 | `@a11y-engineer`    | Accessibility                 |
-| Phase 8 | (all)               | Carousel demo                 |
+**Phase 8 Example (Multiple Agents):**
+```
+🕵️‍♂️ Agent WebGPU Engineer started working on carousel screen effects.
+@webgpu-engineer ...
 
+🕵️‍♂️ Agent Surface Engineer started working on carousel surface management.
+@surface-engineer ...
+
+🕵️‍♂️ Agent Input Engineer started working on carousel navigation controls.
+@input-engineer ...
+
+🕵️‍♂️ Agent Accessibility Engineer started working on carousel accessibility.
+@a11y-engineer ...
+```
 
 **Note:** All agent definitions are stored in `.cursor/rules/agents/{agent-name}/RULE.md`
 
@@ -171,13 +242,14 @@ User: `@build Phase 2`
 2. Confirm Phase 1 is complete (monorepo exists)
 3. Create branch: git checkout -b feat/webgpu-renderer
 4. Create packages/renderer directory
-5. Invoke @webgpu-engineer for WebGPU implementation
-6. Implement: WebGPUContext, QuadRenderer, ShaderLibrary, ScreenPass
-7. Create test directory: mkdir -p packages/renderer/tests/basic
-8. Create test files with descriptive names in tests/ directory
-9. Commit: feat(renderer): add WebGPU renderer with quad and screen pass
-10. Create completion log: .cursor/logs/builds/phase-2-renderer/COMPLETE.md
-11. Report completion
+5. ANNOUNCE: 🕵️‍♂️ Agent WebGPU Engineer started working on WebGPU renderer implementation.
+6. Invoke @webgpu-engineer for WebGPU implementation
+7. Implement: WebGPUContext, QuadRenderer, ShaderLibrary, ScreenPass
+8. Create test directory: mkdir -p packages/renderer/tests/basic
+9. Create test files with descriptive names in tests/ directory
+10. Commit: feat(renderer): add WebGPU renderer with quad and screen pass
+11. Create completion log: .cursor/logs/builds/phase-2-renderer/COMPLETE.md
+12. Report completion
 ```
 
 ## Error Handling
