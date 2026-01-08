@@ -48,8 +48,9 @@ export class LayoutTracker {
   private _pendingVisibilityUpdates: Map<string, VisibilityUpdate> = new Map();
   private _rafHandle: number | null = null;
   
-  // Tracked elements (element → surface for observer callbacks)
-  private _trackedElements: Map<HTMLElement, Surface> = new Map();
+  // Tracked elements (element → set of surfaces for observer callbacks)
+  // Multiple surfaces can share the same DOM element
+  private _trackedElements: Map<HTMLElement, Set<Surface>> = new Map();
   // Reverse mapping (surfaceId → element) for cleanup when surface.element is null
   private _surfaceElements: Map<string, HTMLElement> = new Map();
   
@@ -85,19 +86,24 @@ export class LayoutTracker {
     // Create ResizeObserver
     this._resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
-        const surface = this._trackedElements.get(entry.target as HTMLElement);
-        if (!surface) continue;
+        const surfaces = this._trackedElements.get(entry.target as HTMLElement);
+        if (!surfaces || surfaces.size === 0) continue;
         
         const rect = entry.target.getBoundingClientRect();
-        this._pendingLayoutUpdates.set(surface.id, {
-          surface,
-          rect: {
-            x: rect.left,
-            y: rect.top,
-            width: rect.width,
-            height: rect.height,
-          },
-        });
+        const rectData: SurfaceRect = {
+          x: rect.left,
+          y: rect.top,
+          width: rect.width,
+          height: rect.height,
+        };
+        
+        // Update all surfaces sharing this element
+        for (const surface of surfaces) {
+          this._pendingLayoutUpdates.set(surface.id, {
+            surface,
+            rect: rectData,
+          });
+        }
       }
       
       this.scheduleUpdate();
@@ -108,13 +114,16 @@ export class LayoutTracker {
       this._intersectionObserver = new IntersectionObserver(
         (entries) => {
           for (const entry of entries) {
-            const surface = this._trackedElements.get(entry.target as HTMLElement);
-            if (!surface) continue;
+            const surfaces = this._trackedElements.get(entry.target as HTMLElement);
+            if (!surfaces || surfaces.size === 0) continue;
             
-            this._pendingVisibilityUpdates.set(surface.id, {
-              surface,
-              visible: entry.isIntersecting,
-            });
+            // Update all surfaces sharing this element
+            for (const surface of surfaces) {
+              this._pendingVisibilityUpdates.set(surface.id, {
+                surface,
+                visible: entry.isIntersecting,
+              });
+            }
           }
           
           this.scheduleUpdate();
@@ -167,19 +176,31 @@ export class LayoutTracker {
     
     const element = surface.element;
     
-    // Add to tracked elements map
-    this._trackedElements.set(element, surface);
+    // Get or create the set of surfaces for this element
+    let surfaces = this._trackedElements.get(element);
+    const isFirstSurfaceForElement = !surfaces;
+    
+    if (!surfaces) {
+      surfaces = new Set();
+      this._trackedElements.set(element, surfaces);
+    }
+    
+    // Add surface to the set
+    surfaces.add(surface);
+    
     // Store reverse mapping for cleanup (needed if surface.element is nulled before removal)
     this._surfaceElements.set(surface.id, element);
     
-    // Observe with ResizeObserver
-    if (this._resizeObserver) {
-      this._resizeObserver.observe(element);
-    }
-    
-    // Observe with IntersectionObserver
-    if (this._intersectionObserver) {
-      this._intersectionObserver.observe(element);
+    // Only observe if this is the first surface for this element
+    // (observers are per-element, not per-surface)
+    if (isFirstSurfaceForElement) {
+      if (this._resizeObserver) {
+        this._resizeObserver.observe(element);
+      }
+      
+      if (this._intersectionObserver) {
+        this._intersectionObserver.observe(element);
+      }
     }
   }
 
@@ -196,18 +217,27 @@ export class LayoutTracker {
     const element = this._surfaceElements.get(surface.id);
     if (!element) return;
     
-    // Remove from both maps
-    this._trackedElements.delete(element);
+    // Remove surface from the element's surface set
+    const surfaces = this._trackedElements.get(element);
+    if (surfaces) {
+      surfaces.delete(surface);
+      
+      // Only unobserve if no more surfaces are tracking this element
+      if (surfaces.size === 0) {
+        this._trackedElements.delete(element);
+        
+        if (this._resizeObserver) {
+          this._resizeObserver.unobserve(element);
+        }
+        
+        if (this._intersectionObserver) {
+          this._intersectionObserver.unobserve(element);
+        }
+      }
+    }
+    
+    // Always clean up the reverse mapping
     this._surfaceElements.delete(surface.id);
-    
-    // Unobserve
-    if (this._resizeObserver) {
-      this._resizeObserver.unobserve(element);
-    }
-    
-    if (this._intersectionObserver) {
-      this._intersectionObserver.unobserve(element);
-    }
   }
 
   /**
@@ -246,14 +276,19 @@ export class LayoutTracker {
    * Useful for manual synchronization
    */
   forceUpdate(): void {
-    this._trackedElements.forEach((surface, element) => {
+    this._trackedElements.forEach((surfaces, element) => {
       const rect = element.getBoundingClientRect();
-      surface._updateRect({
+      const rectData: SurfaceRect = {
         x: rect.left,
         y: rect.top,
         width: rect.width,
         height: rect.height,
-      });
+      };
+      
+      // Update all surfaces sharing this element
+      for (const surface of surfaces) {
+        surface._updateRect(rectData);
+      }
     });
   }
 

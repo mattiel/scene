@@ -55,10 +55,10 @@ export class Surface {
   // Motion properties (can be bound to motion values or set statically)
   private _motionValues: Map<SurfaceMotionProperty, number> = new Map();
   
-  // Callbacks
-  private _onLayoutChange?: (rect: SurfaceRect) => void;
-  private _onVisibilityChange?: (visible: boolean) => void;
-  private _onZIndexChange?: (zIndex: number) => void;
+  // Callbacks (supports multiple subscribers)
+  private _onLayoutChangeCallbacks: Set<(rect: SurfaceRect) => void> = new Set();
+  private _onVisibilityChangeCallbacks: Set<(visible: boolean) => void> = new Set();
+  private _onZIndexChangeCallbacks: Set<(zIndex: number) => void> = new Set();
   
   constructor(
     id: string, 
@@ -147,8 +147,8 @@ export class Surface {
   set zIndex(value: number) {
     if (this._zIndex !== value) {
       this._zIndex = value;
-      if (this._onZIndexChange) {
-        this._onZIndexChange(value);
+      for (const callback of this._onZIndexChangeCallbacks) {
+        callback(value);
       }
     }
   }
@@ -173,8 +173,8 @@ export class Surface {
    */
   _updateRect(rect: SurfaceRect): void {
     this._rect = rect;
-    if (this._onLayoutChange) {
-      this._onLayoutChange(rect);
+    for (const callback of this._onLayoutChangeCallbacks) {
+      callback(rect);
     }
   }
 
@@ -185,8 +185,8 @@ export class Surface {
   _updateVisibility(visible: boolean): void {
     if (this._isVisible !== visible) {
       this._isVisible = visible;
-      if (this._onVisibilityChange) {
-        this._onVisibilityChange(visible);
+      for (const callback of this._onVisibilityChangeCallbacks) {
+        callback(visible);
       }
     }
   }
@@ -225,40 +225,37 @@ export class Surface {
 
   /**
    * Subscribe to layout changes
+   * Supports multiple subscribers - callbacks are not overwritten
+   * @returns Unsubscribe function
    */
   onLayoutChange(callback: (rect: SurfaceRect) => void): () => void {
-    this._onLayoutChange = callback;
+    this._onLayoutChangeCallbacks.add(callback);
     return () => {
-      // Only unsubscribe if this callback is still active
-      if (this._onLayoutChange === callback) {
-        this._onLayoutChange = undefined;
-      }
+      this._onLayoutChangeCallbacks.delete(callback);
     };
   }
 
   /**
    * Subscribe to visibility changes
+   * Supports multiple subscribers - callbacks are not overwritten
+   * @returns Unsubscribe function
    */
   onVisibilityChange(callback: (visible: boolean) => void): () => void {
-    this._onVisibilityChange = callback;
+    this._onVisibilityChangeCallbacks.add(callback);
     return () => {
-      // Only unsubscribe if this callback is still active
-      if (this._onVisibilityChange === callback) {
-        this._onVisibilityChange = undefined;
-      }
+      this._onVisibilityChangeCallbacks.delete(callback);
     };
   }
 
   /**
    * Subscribe to z-index changes
+   * Supports multiple subscribers - callbacks are not overwritten
+   * @returns Unsubscribe function
    */
   onZIndexChange(callback: (zIndex: number) => void): () => void {
-    this._onZIndexChange = callback;
+    this._onZIndexChangeCallbacks.add(callback);
     return () => {
-      // Only unsubscribe if this callback is still active
-      if (this._onZIndexChange === callback) {
-        this._onZIndexChange = undefined;
-      }
+      this._onZIndexChangeCallbacks.delete(callback);
     };
   }
 
@@ -299,9 +296,9 @@ export class Surface {
    */
   destroy(): void {
     // Clear callbacks
-    this._onLayoutChange = undefined;
-    this._onVisibilityChange = undefined;
-    this._onZIndexChange = undefined;
+    this._onLayoutChangeCallbacks.clear();
+    this._onVisibilityChangeCallbacks.clear();
+    this._onZIndexChangeCallbacks.clear();
     
     // Don't destroy the texture here - that's managed by the renderer
     // Just clear the reference
