@@ -57,6 +57,24 @@ migrations/
 2. **Use descriptive folder names** - Clear, kebab-case names for easy navigation
 3. **Maintain history** - Don't overwrite; append or create separate update files
 4. **Keep it organized** - One folder per artifact, related files together
+5. **Organize test files** - Test HTML files belong in `packages/{name}/tests/`, not in package root
+
+## Test File Organization
+
+Test HTML files should be organized in package-specific test directories:
+
+```
+packages/{package-name}/
+  tests/
+    basic/           # Basic usage examples
+    features/        # Feature-specific tests
+    diagnostics/     # Debug and diagnostic tests
+```
+
+**Test file naming:**
+- Use descriptive names: `quad-rendering.html`, `memory-leak-check.html`
+- Avoid generic names: `test.html`, `test2.html`, `new-test.html`
+- Group related tests in subdirectories
 
 ## Example Usage
 
