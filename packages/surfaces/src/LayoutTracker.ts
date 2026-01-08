@@ -43,8 +43,9 @@ export class LayoutTracker {
   private _intersectionObserver: IntersectionObserver | null = null;
   
   // Batched updates (processed once per frame)
-  private _pendingLayoutUpdates: Set<LayoutUpdate> = new Set();
-  private _pendingVisibilityUpdates: Set<VisibilityUpdate> = new Set();
+  // Using Map keyed by surface ID to properly coalesce multiple updates per surface
+  private _pendingLayoutUpdates: Map<string, LayoutUpdate> = new Map();
+  private _pendingVisibilityUpdates: Map<string, VisibilityUpdate> = new Map();
   private _rafHandle: number | null = null;
   
   // Tracked elements
@@ -52,6 +53,10 @@ export class LayoutTracker {
   
   // Options
   private _options: Required<LayoutTrackerOptions>;
+  
+  // Unsubscribe functions for registry events
+  private _unsubscribeAdd: (() => void) | null = null;
+  private _unsubscribeRemove: (() => void) | null = null;
   
   constructor(registry: SurfaceRegistry, options: LayoutTrackerOptions = {}) {
     this._registry = registry;
@@ -61,15 +66,20 @@ export class LayoutTracker {
       trackVisibility: options.trackVisibility ?? true,
     };
     
-    // Listen for surface additions/removals
-    this._registry.onAdd(surface => this.trackSurface(surface));
-    this._registry.onRemove(surface => this.untrackSurface(surface));
+    // Listen for surface additions/removals (store unsubscribe functions)
+    this._unsubscribeAdd = this._registry.onAdd(surface => this.trackSurface(surface));
+    this._unsubscribeRemove = this._registry.onRemove(surface => this.untrackSurface(surface));
   }
 
   /**
    * Start tracking all surfaces in the registry
    */
   start(): void {
+    // Prevent duplicate observers if already tracking
+    if (this._resizeObserver) {
+      return;
+    }
+
     // Create ResizeObserver
     this._resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
@@ -77,7 +87,7 @@ export class LayoutTracker {
         if (!surface) continue;
         
         const rect = entry.target.getBoundingClientRect();
-        this._pendingLayoutUpdates.add({
+        this._pendingLayoutUpdates.set(surface.id, {
           surface,
           rect: {
             x: rect.left,
@@ -99,7 +109,7 @@ export class LayoutTracker {
             const surface = this._trackedElements.get(entry.target as HTMLElement);
             if (!surface) continue;
             
-            this._pendingVisibilityUpdates.add({
+            this._pendingVisibilityUpdates.set(surface.id, {
               surface,
               visible: entry.isIntersecting,
             });
@@ -208,13 +218,13 @@ export class LayoutTracker {
    */
   private flushUpdates(): void {
     // Process layout updates
-    for (const update of this._pendingLayoutUpdates) {
+    for (const update of this._pendingLayoutUpdates.values()) {
       update.surface._updateRect(update.rect);
     }
     this._pendingLayoutUpdates.clear();
     
     // Process visibility updates
-    for (const update of this._pendingVisibilityUpdates) {
+    for (const update of this._pendingVisibilityUpdates.values()) {
       update.surface._updateVisibility(update.visible);
     }
     this._pendingVisibilityUpdates.clear();
@@ -255,5 +265,15 @@ export class LayoutTracker {
    */
   destroy(): void {
     this.stop();
+    
+    // Unsubscribe from registry events to prevent callbacks after destruction
+    if (this._unsubscribeAdd) {
+      this._unsubscribeAdd();
+      this._unsubscribeAdd = null;
+    }
+    if (this._unsubscribeRemove) {
+      this._unsubscribeRemove();
+      this._unsubscribeRemove = null;
+    }
   }
 }

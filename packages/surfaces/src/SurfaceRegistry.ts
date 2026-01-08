@@ -194,6 +194,11 @@ export class SurfaceRegistry {
    * Clear all surfaces and destroy them
    */
   clear(): void {
+    // Notify removal callbacks before destroying (allows cleanup like untracking)
+    if (this._onRemove) {
+      this._surfaces.forEach(surface => this._onRemove!(surface));
+    }
+    
     // Destroy all surfaces
     this._surfaces.forEach(surface => surface.destroy());
     
