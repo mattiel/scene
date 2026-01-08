@@ -148,11 +148,137 @@ class Announcer {
 }
 ```
 
+## WCAG Conformance
+
+**Target: WCAG 2.1 Level AA**
+
+Key requirements for Scene:
+- **1.4.3 Contrast** - Focus indicators must have 3:1 contrast ratio
+- **2.1.1 Keyboard** - All functionality available via keyboard
+- **2.4.7 Focus Visible** - Focus indicator always visible
+- **2.5.1 Pointer Gestures** - Multi-point gestures have single-pointer alternatives
+- **4.1.2 Name, Role, Value** - All interactive elements have accessible names
+
+## Browser and Screen Reader Compatibility
+
+Test with these combinations:
+
+| Platform | Screen Reader | Browser | Priority |
+|----------|--------------|---------|----------|
+| macOS | VoiceOver | Safari | High |
+| Windows | NVDA | Firefox | High |
+| Windows | JAWS | Chrome | Medium |
+| Android | TalkBack | Chrome | Medium |
+| iOS | VoiceOver | Safari | Medium |
+
+### VoiceOver Commands (macOS)
+
+- `VO + →/←` - Navigate elements
+- `VO + Space` - Activate element
+- `VO + U` - Open rotor
+- `VO + Shift + ↓` - Enter web area
+
+### NVDA Commands (Windows)
+
+- `Tab` - Navigate focusable elements
+- `↑/↓` - Browse mode navigation
+- `Enter/Space` - Activate element
+- `NVDA + F7` - Elements list
+
+## Screen Reader Testing Workflow
+
+1. **Enable screen reader** and close your eyes or look away
+2. **Navigate to Scene component** using Tab
+3. **Verify announcements:**
+   - Element role (button, listbox, etc.)
+   - Accessible name (label)
+   - State (selected, expanded, etc.)
+4. **Navigate within Scene** using arrow keys
+5. **Activate elements** using Enter/Space
+6. **Listen for live region announcements** on state changes
+
+## Reduced Motion
+
+Respect user preference for reduced motion:
+
+```typescript
+class MotionPreference {
+  static prefersReducedMotion(): boolean {
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  }
+  
+  static addListener(callback: (reduced: boolean) => void): void {
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    mq.addEventListener('change', (e) => callback(e.matches));
+  }
+}
+
+// In animation code
+const duration = MotionPreference.prefersReducedMotion() ? 0 : 300;
+```
+
+## Error Handling
+
+```typescript
+class A11yError extends Error {
+  constructor(
+    message: string,
+    public readonly element?: HTMLElement,
+    public readonly cause?: unknown
+  ) {
+    super(message);
+    this.name = 'A11yError';
+  }
+}
+
+// Validate accessible name
+function validateAccessibleName(element: HTMLElement): void {
+  const name = element.getAttribute('aria-label') || 
+               element.getAttribute('aria-labelledby') ||
+               element.textContent?.trim();
+               
+  if (!name) {
+    console.warn('Element missing accessible name:', element);
+  }
+}
+```
+
+## When to Invoke
+
+Invoke `@a11y-engineer` when:
+- Creating DOM mirrors for canvas elements
+- Implementing focus management and synchronization
+- Adding keyboard navigation patterns
+- Setting up ARIA live regions for announcements
+- Testing with screen readers
+- Ensuring WCAG compliance
+
 ## Testing Checklist
 
+### Keyboard Navigation
 - [ ] All interactive elements reachable via Tab
+- [ ] Tab order follows logical reading order
 - [ ] Arrow keys navigate between items
 - [ ] Enter/Space activates items
-- [ ] Focus visible indicator matches canvas highlight
-- [ ] Screen reader announces item labels
-- [ ] Screen reader announces selection changes
+- [ ] Escape closes/cancels where appropriate
+
+### Visual
+- [ ] Focus indicator always visible
+- [ ] Focus indicator has sufficient contrast (3:1 minimum)
+- [ ] Focus indicator matches canvas highlight position
+
+### Screen Reader
+- [ ] Element roles announced correctly
+- [ ] Element labels announced correctly
+- [ ] Selection state announced
+- [ ] Live regions announce dynamic changes
+- [ ] No duplicate or confusing announcements
+
+### Motion
+- [ ] Reduced motion preference respected
+- [ ] Essential animations still convey meaning
+
+### Cross-Browser
+- [ ] Tested with VoiceOver + Safari
+- [ ] Tested with NVDA + Firefox
+- [ ] No browser-specific a11y regressions

@@ -151,12 +151,63 @@ Don't add attribution to:
 4. **Be Proportional:** Don't over-attribute trivial contributions
 5. **Update Dates:** When significantly updating a file, update the "Last updated" date
 
-## Integration with Orchestrators
+## Orchestration Communication
 
-When the Build Orchestrator (or other orchestrators) invoke you, they will announce:
+When agents are invoked by orchestrators (like `@build`), they must be announced to provide transparency.
+
+### Announcement Format
 
 ```
-🕵️‍♂️ Agent [Your Name] started working on [specific-task]
+🕵️‍♂️ Agent [Agent Name] started working on [descriptive-task-name]
 ```
 
-You don't need to repeat this announcement - just proceed with your work and attribute your outputs as defined above.
+### Announcement Rules
+
+1. **Always Announce:** Every agent invocation must be announced before the @-mention
+2. **Be Specific:** Task names should describe actual work, not generic labels
+3. **Multiple Agents:** When multiple agents work on a task, announce each one separately
+4. **Sequential Clarity:** When one agent hands off to another, the new announcement marks the transition
+
+### Agent Names Reference (Canonical)
+
+| Agent Handle | Display Name | Typical Tasks |
+|--------------|--------------|---------------|
+| `@webgpu-engineer` | WebGPU Engineer | WebGPU renderer, shader optimization, render pipelines |
+| `@surface-engineer` | Surface Engineer | Surface tracking, DOM synchronization, ghost surfaces |
+| `@input-engineer` | Input Engineer | Pointer input, picking, inertia physics |
+| `@a11y-engineer` | Accessibility Engineer | DOM mirrors, keyboard navigation, screen reader support |
+| `@agent-ruler` | Agent Ruler | Creating/refining agents, rule integrity checking |
+| `@build` | Build Orchestrator | N/A (orchestrator announces others) |
+
+### Examples
+
+**Single Agent:**
+```
+🕵️‍♂️ Agent WebGPU Engineer started working on WebGPU renderer implementation.
+
+@webgpu-engineer please implement the renderer package...
+```
+
+**Multiple Agents in Sequence:**
+```
+🕵️‍♂️ Agent WebGPU Engineer started working on screen effect shaders.
+
+@webgpu-engineer implement blur and vignette effects...
+
+[After completion]
+
+🕵️‍♂️ Agent Surface Engineer started working on effect surface integration.
+
+@surface-engineer integrate effects with surface tracking...
+```
+
+### As an Agent Being Invoked
+
+When you are invoked by an orchestrator, you don't need to repeat the announcement - just proceed with your work and attribute your outputs as defined above.
+
+## Cross-References
+
+All agents should be aware of and follow:
+- `@typescript` - TypeScript coding standards for all code
+- `@efficiency` - Credit-conscious patterns for minimal overhead
+- `@git-workflow` - Git standards when creating commits
