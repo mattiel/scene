@@ -229,7 +229,10 @@ export class Surface {
   onLayoutChange(callback: (rect: SurfaceRect) => void): () => void {
     this._onLayoutChange = callback;
     return () => {
-      this._onLayoutChange = undefined;
+      // Only unsubscribe if this callback is still active
+      if (this._onLayoutChange === callback) {
+        this._onLayoutChange = undefined;
+      }
     };
   }
 
@@ -239,7 +242,10 @@ export class Surface {
   onVisibilityChange(callback: (visible: boolean) => void): () => void {
     this._onVisibilityChange = callback;
     return () => {
-      this._onVisibilityChange = undefined;
+      // Only unsubscribe if this callback is still active
+      if (this._onVisibilityChange === callback) {
+        this._onVisibilityChange = undefined;
+      }
     };
   }
 
@@ -249,7 +255,10 @@ export class Surface {
   onZIndexChange(callback: (zIndex: number) => void): () => void {
     this._onZIndexChange = callback;
     return () => {
-      this._onZIndexChange = undefined;
+      // Only unsubscribe if this callback is still active
+      if (this._onZIndexChange === callback) {
+        this._onZIndexChange = undefined;
+      }
     };
   }
 

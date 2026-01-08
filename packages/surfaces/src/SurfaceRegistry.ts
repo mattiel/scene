@@ -12,6 +12,8 @@ export class SurfaceRegistry {
   private _surfaces: Map<string, Surface> = new Map();
   private _sortedSurfaces: Surface[] = [];
   private _needsSort: boolean = false;
+  // Track unsubscribe functions for z-index listeners so we can clean them up
+  private _zIndexUnsubscribes: Map<string, () => void> = new Map();
   
   // Callbacks for lifecycle events (supports multiple subscribers)
   private _onAddCallbacks: Set<(surface: Surface) => void> = new Set();
@@ -30,6 +32,12 @@ export class SurfaceRegistry {
     this._surfaces.set(surface.id, surface);
     this._sortedSurfaces.push(surface);
     this._needsSort = true;
+
+    // Subscribe to z-index changes so sorted() stays accurate
+    const unsubscribe = surface.onZIndexChange(() => {
+      this.markDirty();
+    });
+    this._zIndexUnsubscribes.set(surface.id, unsubscribe);
     
     // Notify all subscribers
     for (const callback of this._onAddCallbacks) {
@@ -46,6 +54,13 @@ export class SurfaceRegistry {
     const surface = this._surfaces.get(id);
     if (!surface) {
       return undefined;
+    }
+
+    // Clean up z-index subscription
+    const unsubscribe = this._zIndexUnsubscribes.get(id);
+    if (unsubscribe) {
+      unsubscribe();
+      this._zIndexUnsubscribes.delete(id);
     }
     
     this._surfaces.delete(id);
@@ -207,6 +222,10 @@ export class SurfaceRegistry {
     
     // Destroy all surfaces
     this._surfaces.forEach(surface => surface.destroy());
+
+    // Clean up z-index subscriptions
+    this._zIndexUnsubscribes.forEach(unsub => unsub());
+    this._zIndexUnsubscribes.clear();
     
     // Clear collections
     this._surfaces.clear();

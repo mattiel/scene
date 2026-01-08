@@ -187,6 +187,10 @@ export class LayoutTracker {
    * Untrack a surface (called automatically when surfaces are removed)
    */
   private untrackSurface(surface: Surface): void {
+    // Drop any queued updates to avoid processing a destroyed surface
+    this._pendingLayoutUpdates.delete(surface.id);
+    this._pendingVisibilityUpdates.delete(surface.id);
+    
     // Use the stored element reference, which works even if surface.element is null
     // (e.g., if surface.destroy() was called before registry.remove())
     const element = this._surfaceElements.get(surface.id);
