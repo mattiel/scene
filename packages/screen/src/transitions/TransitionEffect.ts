@@ -153,8 +153,12 @@ export class TransitionEffect {
    * Create the render pipeline for the current transition type
    */
   private createPipeline(): void {
-    const device: GPUDevice = this.gpuContext.device!;
-    const format: GPUTextureFormat = this.gpuContext.format!;
+    if (!this.gpuContext.device || !this.gpuContext.format) {
+      return;
+    }
+
+    const device: GPUDevice = this.gpuContext.device;
+    const format: GPUTextureFormat = this.gpuContext.format;
 
     // Get shaders
     const vertexShader = this.shaderLibrary.get('fullscreen_vertex');
@@ -255,11 +259,11 @@ export class TransitionEffect {
     textureTo: GPUTexture,
     targetTexture?: GPUTexture
   ): boolean {
-    if (!this.initialized || !this.pipeline || !this.gpuContext.context) {
+    if (!this.initialized || !this.pipeline || !this.gpuContext.context || !this.gpuContext.device) {
       return false;
     }
 
-    const device: GPUDevice = this.gpuContext.device!;
+    const device: GPUDevice = this.gpuContext.device;
 
     // Create bind group
     const bindGroup: GPUBindGroup = device.createBindGroup({
