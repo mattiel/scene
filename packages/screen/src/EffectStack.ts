@@ -319,6 +319,7 @@ export class EffectStack {
       texture.destroy();
     }
     this.intermediateTextures = [];
+    this.textureSize = { width: 0, height: 0 };
 
     this.initialized = false;
   }
