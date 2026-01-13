@@ -115,6 +115,9 @@ export class PointerManager {
   
   // Attached state
   private attached: boolean = false;
+  
+  // Original touchAction value (for restoration on detach)
+  private originalTouchAction: string = '';
 
   constructor(
     target: HTMLElement,
@@ -148,6 +151,7 @@ export class PointerManager {
     this.target.addEventListener('pointercancel', this.handlePointerCancel);
     
     // Prevent default touch actions for smoother interaction
+    this.originalTouchAction = this.target.style.touchAction;
     this.target.style.touchAction = 'none';
     
     this.attached = true;
@@ -172,6 +176,9 @@ export class PointerManager {
         // Pointer may already be released
       }
     }
+    
+    // Restore original touchAction
+    this.target.style.touchAction = this.originalTouchAction;
     
     // Reset state
     this.pointers.clear();
@@ -274,50 +281,50 @@ export class PointerManager {
    * Handle pointer move event
    */
   private onPointerMove(e: PointerEvent): void {
-    // Ignore if pointer is not tracked
-    if (!this.pointers.has(e.pointerId)) {
-      return;
-    }
-    
     const pointer = this.normalizePointer(e);
+    const isTracked = this.pointers.has(e.pointerId);
     
-    // Update stored pointer
-    this.pointers.set(pointer.id, pointer);
-    
-    // Check if we should start a drag
-    if (this.pendingGesture && pointer.id === this.pendingGesture.pointerId) {
-      const dx = pointer.x - this.pendingGesture.x;
-      const dy = pointer.y - this.pendingGesture.y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
+    // For tracked pointers (button pressed), update stored state
+    if (isTracked) {
+      // Update stored pointer
+      this.pointers.set(pointer.id, pointer);
       
-      if (distance >= this.options.dragThreshold) {
-        // Start the drag
-        this.gesture = {
-          isDragging: true,
-          startX: this.pendingGesture.x,
-          startY: this.pendingGesture.y,
-          totalDeltaX: dx,
-          totalDeltaY: dy,
-          startTime: this.pendingGesture.time,
-          pointerId: pointer.id,
-        };
-        this.pendingGesture = null;
+      // Check if we should start a drag
+      if (this.pendingGesture && pointer.id === this.pendingGesture.pointerId) {
+        const dx = pointer.x - this.pendingGesture.x;
+        const dy = pointer.y - this.pendingGesture.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
         
-        this.callbacks.onDragStart?.(this.gesture, pointer);
+        if (distance >= this.options.dragThreshold) {
+          // Start the drag
+          this.gesture = {
+            isDragging: true,
+            startX: this.pendingGesture.x,
+            startY: this.pendingGesture.y,
+            totalDeltaX: dx,
+            totalDeltaY: dy,
+            startTime: this.pendingGesture.time,
+            pointerId: pointer.id,
+          };
+          this.pendingGesture = null;
+          
+          this.callbacks.onDragStart?.(this.gesture, pointer);
+        }
+      }
+      
+      // Update gesture if active
+      if (this.gesture && pointer.id === this.gesture.pointerId) {
+        this.gesture.totalDeltaX = pointer.x - this.gesture.startX;
+        this.gesture.totalDeltaY = pointer.y - this.gesture.startY;
+        
+        this.callbacks.onDrag?.(this.gesture, pointer);
       }
     }
     
-    // Update gesture if active
-    if (this.gesture && pointer.id === this.gesture.pointerId) {
-      this.gesture.totalDeltaX = pointer.x - this.gesture.startX;
-      this.gesture.totalDeltaY = pointer.y - this.gesture.startY;
-      
-      this.callbacks.onDrag?.(this.gesture, pointer);
-    }
-    
-    // Update previous position for delta calculation
+    // Update previous position for delta calculation (for both hover and tracked)
     this.previousPointers.set(pointer.id, { x: pointer.x, y: pointer.y });
     
+    // Always invoke callback - needed for hover tracking (picking)
     this.callbacks.onPointerMove?.(pointer);
   }
 
