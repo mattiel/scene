@@ -296,6 +296,7 @@ export class PointerManager {
       this.pointers.set(pointer.id, pointer);
       
       // Check if we should start a drag
+      let dragJustStarted = false;
       if (this.pendingGesture && pointer.id === this.pendingGesture.pointerId) {
         const dx = pointer.x - this.pendingGesture.x;
         const dy = pointer.y - this.pendingGesture.y;
@@ -313,13 +314,14 @@ export class PointerManager {
             pointerId: pointer.id,
           };
           this.pendingGesture = null;
+          dragJustStarted = true;
           
           this.callbacks.onDragStart?.(this.gesture, pointer);
         }
       }
       
-      // Update gesture if active
-      if (this.gesture && pointer.id === this.gesture.pointerId) {
+      // Update gesture if active (skip if drag just started to avoid duplicate event)
+      if (this.gesture && pointer.id === this.gesture.pointerId && !dragJustStarted) {
         this.gesture.totalDeltaX = pointer.x - this.gesture.startX;
         this.gesture.totalDeltaY = pointer.y - this.gesture.startY;
         
