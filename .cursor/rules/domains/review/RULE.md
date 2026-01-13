@@ -1,0 +1,59 @@
+---
+description: "Pre-push AI bug detection for changed files"
+alwaysApply: false
+---
+
+# Code Review
+
+`[rule: review]` — Pre-push bug detection.
+
+## Trigger
+
+Invoke before pushing to scan changed files for bugs.
+
+## Workflow
+
+1. Run `git diff --name-only origin/main` to identify changed files
+2. Read each changed file in the allowed paths
+3. Apply general bug checks (below)
+4. Delegate domain checks based on file paths:
+   - `packages/renderer/`, `packages/screen/` → check @webgpu bug patterns
+   - `packages/surfaces/` → check @surfaces bug patterns
+   - `packages/input/` → check @input bug patterns
+   - `packages/a11y/` → check @a11y bug patterns
+5. Report findings with file:line references
+
+## General Bug Patterns
+
+Look for these in all TypeScript code:
+
+- **Unhandled promises**: async calls without await or .catch()
+- **Resource leaks**: opened handles/listeners without cleanup path
+- **Null access**: optional chaining missing on nullable values
+- **Dead code**: unreachable branches, unused variables
+- **Type coercion**: loose equality (==), truthy checks on objects that could be 0/empty
+- **Off-by-one**: loop bounds, array indexing edge cases
+- **Race conditions**: shared state modified in async flows without guards
+- **Missing error handling**: try/catch absent around fallible operations
+- **Incomplete cleanup**: destroy/dispose methods that don't release all resources
+
+## Output Format
+
+For each finding:
+
+```
+[SEVERITY] file:line - description
+```
+
+Severities:
+- `BUG` — Will break at runtime
+- `WARN` — Likely issue or edge case
+- `NOTE` — Code smell, may indicate deeper problem
+
+## Example Output
+
+```
+[BUG] packages/renderer/src/WebGPUContext.ts:45 - device used before initialize() awaited
+[WARN] packages/screen/src/EffectStack.ts:102 - texture created but no destroy() in cleanup
+[NOTE] packages/surfaces/src/Surface.ts:88 - observer callback could batch with RAF
+```

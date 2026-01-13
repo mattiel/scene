@@ -49,3 +49,4 @@ Example: `[rule: webgpu] Applying constraints for renderer work`
 | Input | `@input` | `packages/input/` |
 | Accessibility | `@a11y` | `packages/a11y/` |
 | Rules | `@ruler` | `.cursor/rules/` |
+| Review | `@review` | Changed files (pre-push bug detection) |

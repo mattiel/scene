@@ -27,6 +27,18 @@ alwaysApply: false
 3) Ghost creation copies rect/zIndex; clean up after
 4) Provide hit tests via registry when needed
 
+## Bug Patterns
+
+Look for these when reviewing surfaces code:
+
+- **Observer leak**: ResizeObserver/IntersectionObserver created without disconnect() on destroy
+- **Stale registry entry**: surface removed from DOM but not unregistered from registry
+- **Missing dirty flag**: z-index change without marking registry dirty for re-sort
+- **Ghost texture leak**: ghost destroyed without releasing associated texture
+- **Sync outside RAF**: layout reads/writes not batched in requestAnimationFrame
+- **getBoundingClientRect in loop**: forced reflow from repeated rect queries
+- **Missing weak references**: holding strong refs to DOM elements that may be removed
+
 ## Checklist
 - [ ] Surfaces add/remove correctly
 - [ ] Rects/visibility update once per frame
