@@ -111,14 +111,20 @@ Track DOM elements and prepare them for GPU augmentation.
 - ✅ Build successful (14.45 kB, 3.84 kB gzipped)
 - ✅ Test page created and verified
 
-### Phase 4: Screen Effects
+### Phase 4: Screen Effects ✅
+
+**Status:** COMPLETE (January 12, 2026)  
+**Log:** [Phase 4 Completion](../logs/builds/phase-4-screen/COMPLETE.md)
 
 Implement fullscreen post-processing pipeline.
 
-- Create `@scene/screen` package:
-  - `EffectStack` - ordered list of post-process effects
-  - Built-in effects: blur, vignette, chromatic aberration
-  - Transition shaders for navigation (dissolve, wipe)
+- ✅ Create `@scene/screen` package:
+  - ✅ `EffectStack` - ordered list of post-process effects
+  - ✅ Built-in effects: blur, vignette, chromatic aberration
+  - ✅ Transition shaders for navigation (dissolve, wipe, fade-to-black, zoom)
+  - ✅ `TransitionEffect` - manages navigation transitions
+- ✅ Build successful (19.99 kB, 4.71 kB gzipped)
+- ✅ Test pages created and verified
 
 ### Phase 5: Input System
 

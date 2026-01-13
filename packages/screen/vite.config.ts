@@ -1,5 +1,4 @@
 import { defineConfig } from 'vite';
-import { resolve } from 'path';
 import dts from 'vite-plugin-dts';
 
 export default defineConfig({
@@ -12,18 +11,14 @@ export default defineConfig({
   ],
   build: {
     lib: {
-      entry: resolve(__dirname, 'src/index.ts'),
-      name: 'SceneRenderer',
+      entry: './src/index.ts',
+      name: 'SceneScreen',
       formats: ['es'],
-      fileName: 'index'
+      fileName: 'index',
     },
     rollupOptions: {
-      external: [],
-      output: {
-        preserveModules: false
-      }
+      external: ['@scene/renderer'],
     },
     sourcemap: true,
-    minify: false
-  }
+  },
 });

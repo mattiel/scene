@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Transition Effects Demo - @scene/screen</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #1a1a1a;
+      color: #fff;
+      padding: 20px;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      margin-bottom: 10px;
+    }
+
+    .description {
+      color: #888;
+      margin-bottom: 20px;
+    }
+
+    .status {
+      padding: 10px;
+      margin: 10px 0;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 14px;
+    }
+
+    .status.success {
+      background: #0a4d0a;
+      border: 1px solid #0f6f0f;
+    }
+
+    .status.error {
+      background: #4d0a0a;
+      border: 1px solid #6f0f0f;
+    }
+
+    .status.info {
+      background: #0a2d4d;
+      border: 1px solid #0f4f6f;
+    }
+
+    canvas {
+      width: 100%;
+      max-width: 800px;
+      height: 400px;
+      background: #000;
+      border: 1px solid #333;
+      margin: 20px 0;
+      display: block;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 15px;
+      margin: 20px 0;
+    }
+
+    .control-group {
+      background: #2a2a2a;
+      padding: 15px;
+      border-radius: 8px;
+      min-width: 200px;
+    }
+
+    .control-group h3 {
+      font-size: 14px;
+      margin-bottom: 10px;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .control-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    label {
+      font-size: 13px;
+      min-width: 80px;
+    }
+
+    input[type="range"] {
+      flex: 1;
+      cursor: pointer;
+    }
+
+    select {
+      flex: 1;
+      padding: 6px;
+      background: #333;
+      border: 1px solid #444;
+      color: #fff;
+      border-radius: 4px;
+    }
+
+    .value {
+      font-family: monospace;
+      font-size: 12px;
+      color: #888;
+      min-width: 40px;
+      text-align: right;
+    }
+
+    button {
+      padding: 10px 20px;
+      background: #444;
+      border: 1px solid #555;
+      color: #fff;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      margin-right: 10px;
+    }
+
+    button:hover {
+      background: #555;
+    }
+
+    button.primary {
+      background: #0a4d6d;
+      border-color: #0f6f9f;
+    }
+
+    button.primary:hover {
+      background: #0f6f9f;
+    }
+
+    .progress-bar {
+      width: 100%;
+      height: 8px;
+      background: #333;
+      border-radius: 4px;
+      overflow: hidden;
+      margin-top: 10px;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #0a4d6d, #0f9f6f);
+      width: 0%;
+      transition: width 0.05s linear;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>@scene/screen Transition Effects Demo</h1>
+    <p class="description">Test navigation transitions: dissolve, wipe, fade-to-black, and zoom.</p>
+    
+    <div id="status"></div>
+    
+    <canvas id="canvas"></canvas>
+    
+    <div class="progress-bar">
+      <div class="progress-fill" id="progress-fill"></div>
+    </div>
+    
+    <div class="controls">
+      <div class="control-group">
+        <h3>Transition Type</h3>
+        <div class="control-row">
+          <select id="transition-type">
+            <option value="dissolve">Dissolve</option>
+            <option value="wipe">Wipe</option>
+            <option value="fade_to_black">Fade to Black</option>
+            <option value="zoom">Zoom</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="control-group" id="wipe-options">
+        <h3>Wipe Options</h3>
+        <div class="control-row">
+          <label>Direction</label>
+          <select id="wipe-direction">
+            <option value="left-to-right">Left → Right</option>
+            <option value="right-to-left">Right → Left</option>
+            <option value="top-to-bottom">Top → Bottom</option>
+            <option value="bottom-to-top">Bottom → Top</option>
+          </select>
+        </div>
+        <div class="control-row">
+          <label>Softness</label>
+          <input type="range" id="wipe-softness" min="0" max="0.5" step="0.01" value="0.1">
+          <span class="value" id="wipe-softness-value">0.10</span>
+        </div>
+      </div>
+
+      <div class="control-group" id="zoom-options" style="display: none;">
+        <h3>Zoom Options</h3>
+        <div class="control-row">
+          <label>Zoom Amount</label>
+          <input type="range" id="zoom-amount" min="0.1" max="1" step="0.05" value="0.3">
+          <span class="value" id="zoom-amount-value">0.30</span>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <h3>Duration</h3>
+        <div class="control-row">
+          <label>ms</label>
+          <input type="range" id="duration" min="200" max="2000" step="100" value="500">
+          <span class="value" id="duration-value">500</span>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <h3>Actions</h3>
+        <button id="play-btn" class="primary">▶ Play Transition</button>
+        <button id="swap-btn">⇄ Swap Textures</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { 
+      WebGPUContext, 
+      ShaderLibrary, 
+    } from '../../node_modules/@scene/renderer/dist/index.js';
+
+    import {
+      TransitionEffect,
+      registerTransitionShaders,
+    } from '../dist/index.js';
+
+    const statusEl = document.getElementById('status');
+    const canvas = document.getElementById('canvas');
+    const progressFill = document.getElementById('progress-fill');
+
+    function addStatus(message, type = 'success') {
+      const div = document.createElement('div');
+      div.className = `status ${type}`;
+      div.textContent = message;
+      statusEl.appendChild(div);
+    }
+
+    // State
+    let context, shaderLibrary, transition;
+    let textureA, textureB;
+    let isPlaying = false;
+    let swapped = false;
+
+    async function initialize() {
+      addStatus('Initializing WebGPU...', 'info');
+
+      // Initialize WebGPU
+      context = new WebGPUContext();
+      const initialized = await context.initialize({
+        canvas,
+        powerPreference: 'high-performance'
+      });
+
+      if (!initialized) {
+        addStatus('WebGPU not available - test cannot run', 'error');
+        return false;
+      }
+
+      addStatus('WebGPU initialized', 'success');
+
+      // Initialize ShaderLibrary
+      shaderLibrary = new ShaderLibrary();
+      shaderLibrary.setDevice(context.device);
+      shaderLibrary.registerDefaults();
+      
+      // Register transition shaders
+      registerTransitionShaders(shaderLibrary);
+      addStatus('Transition shaders registered', 'success');
+
+      // Create transition effect
+      transition = new TransitionEffect(context, shaderLibrary, {
+        type: 'dissolve',
+        duration: 500,
+      });
+      transition.initialize();
+      addStatus('TransitionEffect initialized', 'success');
+
+      // Create test textures
+      textureA = context.device.createTexture({
+        size: [canvas.width, canvas.height],
+        format: context.format,
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT
+      });
+
+      textureB = context.device.createTexture({
+        size: [canvas.width, canvas.height],
+        format: context.format,
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT
+      });
+
+      // Render colors to textures
+      renderColorToTexture(textureA, { r: 0.8, g: 0.2, b: 0.3, a: 1.0 });
+      renderColorToTexture(textureB, { r: 0.2, g: 0.5, b: 0.8, a: 1.0 });
+
+      addStatus('Ready! Click "Play Transition" to start.', 'success');
+      return true;
+    }
+
+    function renderColorToTexture(texture, color) {
+      const commandEncoder = context.device.createCommandEncoder();
+      const pass = commandEncoder.beginRenderPass({
+        colorAttachments: [{
+          view: texture.createView(),
+          clearValue: color,
+          loadOp: 'clear',
+          storeOp: 'store'
+        }]
+      });
+      pass.end();
+      context.device.queue.submit([commandEncoder.finish()]);
+    }
+
+    function setupControls() {
+      const typeSelect = document.getElementById('transition-type');
+      const wipeOptions = document.getElementById('wipe-options');
+      const zoomOptions = document.getElementById('zoom-options');
+      const wipeDirection = document.getElementById('wipe-direction');
+      const wipeSoftness = document.getElementById('wipe-softness');
+      const zoomAmount = document.getElementById('zoom-amount');
+      const duration = document.getElementById('duration');
+
+      typeSelect.addEventListener('change', () => {
+        const type = typeSelect.value;
+        transition.setType(type);
+        
+        // Show/hide relevant options
+        wipeOptions.style.display = type === 'wipe' ? 'block' : 'none';
+        zoomOptions.style.display = type === 'zoom' ? 'block' : 'none';
+      });
+
+      wipeDirection.addEventListener('change', () => {
+        transition.configure({ wipeDirection: wipeDirection.value });
+      });
+
+      wipeSoftness.addEventListener('input', () => {
+        const value = parseFloat(wipeSoftness.value);
+        document.getElementById('wipe-softness-value').textContent = value.toFixed(2);
+        transition.configure({ wipeSoftness: value });
+      });
+
+      zoomAmount.addEventListener('input', () => {
+        const value = parseFloat(zoomAmount.value);
+        document.getElementById('zoom-amount-value').textContent = value.toFixed(2);
+        transition.configure({ zoomAmount: value });
+      });
+
+      duration.addEventListener('input', () => {
+        const value = parseInt(duration.value);
+        document.getElementById('duration-value').textContent = value;
+        transition.configure({ duration: value });
+      });
+
+      document.getElementById('play-btn').addEventListener('click', playTransition);
+      document.getElementById('swap-btn').addEventListener('click', () => {
+        swapped = !swapped;
+        renderFrame(swapped ? 1 : 0);
+      });
+    }
+
+    function renderFrame(progress) {
+      transition.setProgress(progress);
+      progressFill.style.width = `${progress * 100}%`;
+
+      const commandEncoder = context.device.createCommandEncoder();
+      
+      const fromTex = swapped ? textureB : textureA;
+      const toTex = swapped ? textureA : textureB;
+      
+      transition.execute(commandEncoder, fromTex, toTex);
+      
+      context.device.queue.submit([commandEncoder.finish()]);
+    }
+
+    function playTransition() {
+      if (isPlaying) return;
+      isPlaying = true;
+
+      const startTime = performance.now();
+      const duration = transition.duration;
+
+      function animate() {
+        const elapsed = performance.now() - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        
+        renderFrame(progress);
+
+        if (progress < 1) {
+          requestAnimationFrame(animate);
+        } else {
+          isPlaying = false;
+          swapped = !swapped;
+        }
+      }
+
+      requestAnimationFrame(animate);
+    }
+
+    // Initialize
+    initialize().then(success => {
+      if (success) {
+        setupControls();
+        renderFrame(0);
+      }
+    }).catch(err => {
+      addStatus(`Error: ${err.message}`, 'error');
+      console.error(err);
+    });
+  </script>
+</body>
+</html>
