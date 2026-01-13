@@ -73,6 +73,8 @@ export class InputManager {
   private isCanvasMode: boolean = false;
   private dragStartSurfaceId: string | null = null;
   private modeChangedUnsub: (() => void) | null = null;
+  // Track whether a drag occurred in the current pointer sequence
+  private dragActive: boolean = false;
   
   constructor(engine: Engine, config: InputManagerConfig = {}) {
     this.eventBus = engine.events;
@@ -206,26 +208,24 @@ export class InputManager {
     // Stop any inertia animation
     this.inertia.stop();
     
-    // Emit core event
-    this.eventBus.emit('pointer:down', {
-      x: pointer.x,
-      y: pointer.y,
-      surfaceId: undefined,
-    });
-    
+    // Determine surface once to avoid duplicate events
+    let surfaceId: string | undefined;
+
     // Run picking if in canvas mode
     if (this.isCanvasMode && this.config.enablePicking) {
       const pickEvent = this.picking.handlePointerDown(pointer);
       
-      // Update event with surface info
       if (pickEvent.topHit) {
-        this.eventBus.emit('pointer:down', {
-          x: pointer.x,
-          y: pointer.y,
-          surfaceId: pickEvent.topHit.surface.id,
-        });
+        surfaceId = pickEvent.topHit.surface.id;
       }
     }
+
+    // Emit a single down event (with surface when available)
+    this.eventBus.emit('pointer:down', {
+      x: pointer.x,
+      y: pointer.y,
+      surfaceId,
+    });
   }
 
   /**
@@ -259,9 +259,8 @@ export class InputManager {
       surfaceId: undefined,
     });
     
-    // Check for tap (no drag occurred)
-    const gesture = this.pointerManager?.getGesture();
-    if (!gesture) {
+    // Check for tap (only when no drag occurred in this pointer sequence)
+    if (!this.dragActive) {
       // This was a tap (no drag threshold exceeded)
       let surfaceId: string | null = null;
       
@@ -276,6 +275,9 @@ export class InputManager {
         y: pointer.y,
       });
     }
+
+    // Reset drag tracking for the next sequence
+    this.dragActive = false;
   }
 
   /**
@@ -284,6 +286,7 @@ export class InputManager {
   private onDragStart(gesture: GestureState, _pointer: NormalizedPointer): void {
     // Track starting surface
     this.dragStartSurfaceId = null;
+    this.dragActive = true;
     
     if (this.isCanvasMode && this.config.enablePicking) {
       const pickResult = this.picking.pickTop(gesture.startX, gesture.startY);
@@ -341,6 +344,7 @@ export class InputManager {
       velocityY,
     });
     
+    this.dragActive = false;
     this.dragStartSurfaceId = null;
   }
 
