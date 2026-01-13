@@ -84,7 +84,10 @@ export class TransitionCoordinator {
     }
 
     const abortController = new AbortController();
-    const mergedSignal = this.mergeSignals(callbacks.signal, abortController.signal);
+    const { signal: mergedSignal, cleanup: cleanupSignals } = this.mergeSignals(
+      callbacks.signal,
+      abortController.signal
+    );
 
     const timeoutMs = callbacks.timeoutMs ?? this.defaultTimeoutMs;
     const timeoutId =
@@ -111,7 +114,7 @@ export class TransitionCoordinator {
       if (mergedSignal.aborted) {
         const reason = mergedSignal.reason ?? 'cancelled';
         callbacks.onCancel?.();
-        this.cleanup();
+        this.cleanup(cleanupSignals);
         return {
           status: reason === 'timeout' ? 'timeout' : 'cancelled',
           from: request.from,
@@ -119,11 +122,11 @@ export class TransitionCoordinator {
         };
       }
 
-      this.cleanup();
+      this.cleanup(cleanupSignals);
       this.engine.events.emit('transition:complete', { to: request.to });
       return { status: 'completed', from: request.from, to: request.to };
     } catch (error) {
-      this.cleanup();
+      this.cleanup(cleanupSignals);
 
       // Distinguish abort-induced rejections from real errors
       const reason = error === 'timeout' || error === 'manual' ? error : null;
@@ -174,26 +177,32 @@ export class TransitionCoordinator {
     }
   }
 
-  private mergeSignals(signalA: AbortSignal | undefined, signalB: AbortSignal): AbortSignal {
-    if (!signalA) return signalB;
-    if (signalA.aborted) return signalA;
+  private mergeSignals(
+    signalA: AbortSignal | undefined,
+    signalB: AbortSignal
+  ): { signal: AbortSignal; cleanup: () => void } {
+    if (!signalA) return { signal: signalB, cleanup: () => {} };
+    if (signalA.aborted) return { signal: signalA, cleanup: () => {} };
 
     const controller = new AbortController();
+    const listeners: Array<{ signal: AbortSignal; handler: () => void }> = [];
 
     const forwardAbort = (signal: AbortSignal) => {
-      signal.addEventListener(
-        'abort',
-        () => {
-          controller.abort(signal.reason);
-        },
-        { once: true }
-      );
+      const handler = () => controller.abort(signal.reason);
+      signal.addEventListener('abort', handler, { once: true });
+      listeners.push({ signal, handler });
     };
 
     forwardAbort(signalA);
     forwardAbort(signalB);
 
-    return controller.signal;
+    const cleanup = () => {
+      for (const { signal, handler } of listeners) {
+        signal.removeEventListener('abort', handler);
+      }
+    };
+
+    return { signal: controller.signal, cleanup };
   }
 
   /**
@@ -223,9 +232,9 @@ export class TransitionCoordinator {
   }
 
   /**
-   * Cleanup active transition: remove ghosts, clear timeout.
+   * Cleanup active transition: remove ghosts, clear timeout, remove signal listeners.
    */
-  private cleanup(): void {
+  private cleanup(cleanupSignals?: () => void): void {
     if (!this.active) return;
 
     if (this.active.timeoutId !== null) {
@@ -233,10 +242,15 @@ export class TransitionCoordinator {
     }
 
     for (const ghost of this.active.ghosts) {
-      this.registry.remove(ghost.id);
-      ghost.destroy();
+      try {
+        this.registry.remove(ghost.id);
+        ghost.destroy();
+      } catch (e) {
+        console.warn('Failed to cleanup ghost', ghost.id, e);
+      }
     }
 
+    cleanupSignals?.();
     this.active = null;
   }
 
