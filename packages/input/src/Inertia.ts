@@ -216,6 +216,9 @@ export class Inertia {
    * Release and start inertia animation (call at drag end)
    */
   release(): void {
+    // Cancel any existing animation to prevent orphaned RAF callbacks
+    this.stop();
+    
     const { vx, vy } = this.calculateVelocity();
     
     this.velocityX = vx;
@@ -232,7 +235,9 @@ export class Inertia {
     this.lastTime = performance.now();
     this.samples = [];
     
-    this.animate();
+    // Schedule first frame asynchronously so release() returns before any callbacks fire.
+    // This ensures dragEnd is emitted before inertia updates begin.
+    this.animationId = requestAnimationFrame(this.animate);
   }
 
   /**
