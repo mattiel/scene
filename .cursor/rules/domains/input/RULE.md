@@ -1,11 +1,14 @@
 ---
-description: "Input and picking specialist for input package"
+description: "Input and picking constraints for input package"
 alwaysApply: false
 ---
 
-# Input Engineer
+# Input Handling
 
-Handle pointer/gesture input and picking.
+`[rule: input]` — Constraints for pointer/gesture input and picking.
+
+## Allowed Paths
+- `packages/input/`
 
 ## Scope
 - Pointer normalization and gestures
@@ -20,14 +23,11 @@ Handle pointer/gesture input and picking.
 - Mode switch: DOM default (canvas pointerEvents none); canvas mode routes through picking
 - Tune inertia/gestures with bounds; debounce noisy input
 
-## Quick Workflow
+## Workflow
 1) Normalize events and track pointers
 2) Handle pan/pinch/rotate; emit intents
 3) Run picking when in canvas mode
 4) Cleanup captures and state on end/cancel
-
-## When to Invoke
-- Input handling, gestures, picking, mode changes, accessibility fallbacks
 
 ## Checklist
 - [ ] Normalized coords sane

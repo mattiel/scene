@@ -1,9 +1,10 @@
+<!-- AUTO-GENERATED from scene/RULE.md - DO NOT EDIT -->
 ---
-description: "Scene project context - DOM-first cinematic effects engine using WebGPU"
+description: "Scene context - DOM-first cinematic effects engine using WebGPU"
 alwaysApply: true
 ---
 
-# Scene Project Context
+# Scene
 
 You are working on **Scene**, a DOM-first cinematic effects engine for the web.
 
@@ -38,18 +39,17 @@ packages/
 - **Mode A (DOM-Interactive)**: Canvas has `pointer-events: none`. DOM handles all interaction.
 - **Mode B (Canvas-Interactive)**: Canvas has `pointer-events: auto`. Scene owns pointer input.
 
-## Agent Invocation Guide
+## Domain Rule Reference
 
-When building specific features, invoke the appropriate specialist:
+When building specific features, invoke the appropriate domain rule:
 
-| Task | Agent |
-|------|-------|
-| WebGPU/shaders/rendering | `@webgpu-engineer` |
-| Surface tracking/DOM sync | `@surface-engineer` |
-| Pointer/picking/inertia | `@input-engineer` |
-| Accessibility/keyboard | `@a11y-engineer` |
-| Orchestrate a build phase | `@build` |
-| Create/refine agent rules | `@agent-ruler` |
+| Task | Rule |
+|------|------|
+| WebGPU/shaders/rendering | `@webgpu` |
+| Surface tracking/DOM sync | `@surfaces` |
+| Pointer/picking/inertia | `@input` |
+| Accessibility/keyboard | `@a11y` |
+| Create/refine rules | `@ruler` |
 
 ## Graceful Degradation
 

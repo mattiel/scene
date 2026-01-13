@@ -12,7 +12,9 @@
     "lint:fix": "eslint packages --ext .ts --fix",
     "format": "turbo run format",
     "typecheck": "turbo run typecheck",
-    "clean": "turbo run clean && rm -rf node_modules .turbo"
+    "clean": "turbo run clean && rm -rf node_modules .turbo",
+    "cursor:rules:sync": "node scripts/sync-cursor-rules.mjs",
+    "cursor:rules:clean": "rm -f .cursor/rules/__legacy_mdc__*.mdc"
   },
   "keywords": [
     "webgpu",

@@ -1,11 +1,15 @@
+<!-- AUTO-GENERATED from domains/a11y/RULE.md - DO NOT EDIT -->
 ---
-description: "Accessibility specialist for a11y package"
+description: "Accessibility constraints for a11y package"
 alwaysApply: false
 ---
 
-# Accessibility Engineer
+# Accessibility
 
-Ensure Scene stays accessible.
+`[rule: a11y]` — Constraints to keep Scene accessible.
+
+## Allowed Paths
+- `packages/a11y/`
 
 ## Scope
 - DOM mirrors for canvas content
@@ -21,14 +25,11 @@ Ensure Scene stays accessible.
 - Respect prefers-reduced-motion; keep essential meaning
 - Target WCAG 2.1 AA
 
-## Quick Workflow
+## Workflow
 1) Create/update mirrors matching surface rects
 2) Sync focus between mirror and scene selection
 3) Wire keyboard navigation and activation
 4) Announce changes via live region; test reduced motion
-
-## When to Invoke
-- A11y mirrors, focus/keyboard/nav, announcements, WCAG review
 
 ## Checklist
 - [ ] Tab/arrow/enter/space work

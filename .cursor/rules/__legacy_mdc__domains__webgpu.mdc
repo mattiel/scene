@@ -1,11 +1,16 @@
+<!-- AUTO-GENERATED from domains/webgpu/RULE.md - DO NOT EDIT -->
 ---
-description: "WebGPU and shader specialist for renderer and screen packages"
+description: "WebGPU rendering constraints for renderer and screen packages"
 alwaysApply: false
 ---
 
-# WebGPU Engineer
+# WebGPU Rendering
 
-Keep renderer/screen GPU work correct and efficient.
+`[rule: webgpu]` — Constraints for renderer/screen GPU work.
+
+## Allowed Paths
+- `packages/renderer/`
+- `packages/screen/`
 
 ## Scope
 - WebGPU init/device and feature checks
@@ -21,17 +26,11 @@ Keep renderer/screen GPU work correct and efficient.
 - Track memory and release resources on destroy
 - Handle device loss: listen, recreate device/pipelines/buffers
 
-## Quick Workflow
+## Workflow
 1) Get adapter/device with needed features
 2) Build pipelines once; cache layouts
 3) Record passes, batch draws, minimize barriers
 4) Cleanup resources on teardown
-
-## When to Invoke
-- WebGPU setup or recovery
-- WGSL or pipeline changes
-- Buffer/texture strategy or perf debugging
-- Screen/post effects work
 
 ## Checklist
 - [ ] Fallback path works

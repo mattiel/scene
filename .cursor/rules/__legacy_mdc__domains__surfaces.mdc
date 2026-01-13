@@ -1,11 +1,15 @@
+<!-- AUTO-GENERATED from domains/surfaces/RULE.md - DO NOT EDIT -->
 ---
-description: "Surface and DOM tracking specialist for surfaces package"
+description: "Surface and DOM tracking constraints for surfaces package"
 alwaysApply: false
 ---
 
-# Surface Engineer
+# Surface Tracking
 
-Keep DOM surfaces synced to GPU with minimal work.
+`[rule: surfaces]` — Constraints for DOM surface sync.
+
+## Allowed Paths
+- `packages/surfaces/`
 
 ## Scope
 - `@scene/surfaces`: Surface, SurfaceRegistry, LayoutTracker, GhostSurface
@@ -18,17 +22,11 @@ Keep DOM surfaces synced to GPU with minimal work.
 - Ghosts: fixed rects, no DOM element, clean textures after use
 - Keep tests/docs under package tests/
 
-## Quick Workflow
+## Workflow
 1) Register/unregister surfaces in registry
 2) LayoutTracker batches rect/visibility updates
 3) Ghost creation copies rect/zIndex; clean up after
 4) Provide hit tests via registry when needed
-
-## When to Invoke
-- Surface tracking or batching changes
-- Registry sorting/hit testing fixes
-- Ghost creation or cleanup
-- Layout/visibility performance issues
 
 ## Checklist
 - [ ] Surfaces add/remove correctly

@@ -1,0 +1,38 @@
+<!-- AUTO-GENERATED from domains/input/RULE.md - DO NOT EDIT -->
+---
+description: "Input and picking constraints for input package"
+alwaysApply: false
+---
+
+# Input Handling
+
+`[rule: input]` — Constraints for pointer/gesture input and picking.
+
+## Allowed Paths
+- `packages/input/`
+
+## Scope
+- Pointer normalization and gestures
+- DOM vs Canvas interaction modes
+- Picking and intent events
+- Inertia and momentum
+
+## Rules
+- Normalize mouse/touch/pen; use pointer capture for drags
+- Emit intent events; never navigate directly
+- Provide keyboard equivalents for pointer actions
+- Mode switch: DOM default (canvas pointerEvents none); canvas mode routes through picking
+- Tune inertia/gestures with bounds; debounce noisy input
+
+## Workflow
+1) Normalize events and track pointers
+2) Handle pan/pinch/rotate; emit intents
+3) Run picking when in canvas mode
+4) Cleanup captures and state on end/cancel
+
+## Checklist
+- [ ] Normalized coords sane
+- [ ] Pointer capture used for drags
+- [ ] Intents emitted; no direct nav
+- [ ] Keyboard equivalents present
+- [ ] Picking hits expected targets
