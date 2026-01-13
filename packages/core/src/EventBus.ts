@@ -29,6 +29,7 @@ export interface EventMap {
   'pointer:down': { x: number; y: number; surfaceId?: string };
   'pointer:move': { x: number; y: number; surfaceId?: string };
   'pointer:up': { x: number; y: number; surfaceId?: string };
+  'pointer:cancel': { x: number; y: number; surfaceId?: string };
 }
 
 interface EventListener {

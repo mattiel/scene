@@ -126,15 +126,21 @@ Implement fullscreen post-processing pipeline.
 - ✅ Build successful (19.99 kB, 4.71 kB gzipped)
 - ✅ Test pages created and verified
 
-### Phase 5: Input System
+### Phase 5: Input System ✅
+
+**Status:** COMPLETE (January 12, 2026)  
+**Log:** [Phase 5 Completion](../../builds/phase-5-input/COMPLETE.md)
 
 Handle pointer input for Canvas-Interactive mode.
 
-- Create `@scene/input` package:
-  - `PointerManager` - normalized pointer events
-  - `Inertia` - momentum/deceleration for drag gestures
-  - `Picking` - CPU ray-plane intersection for surface hit testing
-- `ModeManager` in core toggles `pointer-events` on canvas
+- ✅ Create `@scene/input` package:
+  - ✅ `PointerManager` - normalized pointer events
+  - ✅ `Inertia` - momentum/deceleration for drag gestures
+  - ✅ `Picking` - CPU ray-plane intersection for surface hit testing
+  - ✅ `InputManager` - high-level coordinator with Engine integration
+- ✅ Mode handling via Engine's existing mode system
+- ✅ Build successful (20.75 kB, 5.08 kB gzipped)
+- ✅ Test page created and verified
 
 ### Phase 6: Navigation Transitions
 
