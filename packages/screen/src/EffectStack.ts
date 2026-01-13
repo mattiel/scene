@@ -58,6 +58,7 @@ export class EffectStack {
   private textureSize: { width: number; height: number };
   private effectIdCounter: number;
   private initialized: boolean;
+  private passthroughEffectHandle: string | null;
 
   constructor(screenPass: ScreenPass) {
     this.screenPass = screenPass;
@@ -68,6 +69,7 @@ export class EffectStack {
     this.textureSize = { width: 0, height: 0 };
     this.effectIdCounter = 0;
     this.initialized = false;
+    this.passthroughEffectHandle = null;
   }
 
   /**
@@ -76,6 +78,16 @@ export class EffectStack {
   initialize(): boolean {
     if (!this.screenPass.isInitialized) {
       console.warn('EffectStack: ScreenPass not initialized');
+      return false;
+    }
+
+    // Create passthrough effect for when all effects are disabled
+    try {
+      this.passthroughEffectHandle = this.screenPass.createEffect({
+        shaderName: 'copy_fragment',
+      });
+    } catch (error: unknown) {
+      console.warn('EffectStack: Failed to create passthrough effect:', error);
       return false;
     }
 
@@ -253,7 +265,17 @@ export class EffectStack {
     }
 
     const enabledEffects: Effect[] = this.getEnabled();
+
+    // When no effects are enabled, pass through source to target unchanged
     if (enabledEffects.length === 0) {
+      if (this.passthroughEffectHandle) {
+        this.screenPass.execute(
+          commandEncoder,
+          this.passthroughEffectHandle,
+          sourceTexture,
+          finalTarget
+        );
+      }
       return;
     }
 
@@ -314,6 +336,12 @@ export class EffectStack {
    */
   destroy(): void {
     this.clear();
+
+    // Clean up passthrough effect
+    if (this.passthroughEffectHandle) {
+      this.screenPass.removeEffect(this.passthroughEffectHandle);
+      this.passthroughEffectHandle = null;
+    }
 
     for (const texture of this.intermediateTextures) {
       texture.destroy();
