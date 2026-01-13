@@ -82,6 +82,13 @@ export class TransitionEffect {
     }
 
     try {
+      // initialize() can be called multiple times (e.g. renderer re-creation).
+      // Ensure we tear down previously-created GPU resources to avoid using
+      // stale pipelines/buffers from a destroyed device.
+      if (this.initialized || this.uniformBuffer || this.sampler || this.bindGroupLayout) {
+        this.cleanup();
+      }
+
       const device: GPUDevice = this.gpuContext.device;
 
       // Create sampler

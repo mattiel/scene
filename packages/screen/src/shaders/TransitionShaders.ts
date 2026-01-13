@@ -78,8 +78,10 @@ export const wipeShader: ShaderModule = {
         coord = 1.0 - uv.y;
       }
       
-      let edge: f32 = params.progress * (1.0 + params.softness);
-      let t: f32 = smoothstep(edge - params.softness, edge, coord);
+      // Ensure minimum softness to avoid smoothstep undefined behavior when low >= high
+      let softness: f32 = max(params.softness, 0.0001);
+      let edge: f32 = params.progress * (1.0 + softness);
+      let t: f32 = smoothstep(edge - softness, edge, coord);
       
       return mix(colorTo, colorFrom, t);
     }
@@ -152,13 +154,13 @@ export const zoomShader: ShaderModule = {
     ) -> @location(0) vec4f {
       let center: vec2f = vec2f(0.5, 0.5);
       
-      // Zoom out from source (multiply UV by increasing value to sample larger area = zoom out)
+      // Source: starts normal, zooms OUT (shrinks into distance) as progress increases
       let zoomFrom: f32 = 1.0 + params.progress * params.zoomAmount;
       let uvFrom: vec2f = (uv - center) * zoomFrom + center;
       
-      // Zoom in to destination (divide UV by decreasing value to sample smaller area = zoom in)
+      // Destination: starts zoomed OUT (small/distant), zooms IN (grows to normal) as progress increases
       let zoomTo: f32 = 1.0 + (1.0 - params.progress) * params.zoomAmount;
-      let uvTo: vec2f = (uv - center) / zoomTo + center;
+      let uvTo: vec2f = (uv - center) * zoomTo + center;
       
       let colorFrom: vec4f = textureSample(textureFrom, textureSampler, uvFrom);
       let colorTo: vec4f = textureSample(textureTo, textureSampler, uvTo);
