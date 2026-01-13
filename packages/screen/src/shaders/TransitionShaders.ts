@@ -176,16 +176,17 @@ export const zoomShader: ShaderModule = {
         alphaTo = 0.0;
       }
       
-      // Handle edge cases: when one texture is out of bounds, show the other at full intensity
-      if (alphaFrom == 0.0) {
-        return colorTo * alphaTo;
-      }
-      if (alphaTo == 0.0) {
-        return colorFrom * alphaFrom;
-      }
+      // Weighted blend with normalization to handle out-of-bounds cases
+      // When one texture is out of bounds, the other shows at full intensity
+      let weightFrom: f32 = alphaFrom * (1.0 - params.progress);
+      let weightTo: f32 = alphaTo * params.progress;
+      let totalWeight: f32 = weightFrom + weightTo;
       
-      // Both textures are in bounds: blend based on progress
-      return mix(colorFrom, colorTo, params.progress);
+      if (totalWeight > 0.0) {
+        return (colorFrom * weightFrom + colorTo * weightTo) / totalWeight;
+      } else {
+        return vec4f(0.0, 0.0, 0.0, 1.0);
+      }
     }
   `,
   entryPoints: { fragment: 'main' },
