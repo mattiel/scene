@@ -50,6 +50,9 @@ export class Engine {
   private _surfaces: Map<string, any> = new Map(); // Will be typed when surfaces package exists
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private _renderer: any = null; // Will be typed when renderer package exists
+  // Navigation coordinator (set by @scene/navigation)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private _navigation: any = null;
   
   constructor(config: EngineConfig = {}) {
     this._mode = config.mode ?? InteractionMode.DOM_INTERACTIVE;
@@ -116,6 +119,14 @@ export class Engine {
    */
   get scheduler(): RAFScheduler {
     return this._scheduler;
+  }
+
+  /**
+   * Get navigation API (set by navigation package)
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  get nav(): any {
+    return this._navigation;
   }
 
   /**
@@ -285,6 +296,15 @@ export class Engine {
   }
 
   /**
+   * Register navigation coordinator (called by navigation package)
+   * @internal
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  _setNavigation(navigation: any): void {
+    this._navigation = navigation;
+  }
+
+  /**
    * Get renderer
    * @internal
    */
@@ -346,6 +366,7 @@ export class Engine {
     this._events.clear();
     this._surfaces.clear();
     this._renderer = null;
+    this._navigation = null;
     this._canvas = null;
     this._isReady = false;
   }

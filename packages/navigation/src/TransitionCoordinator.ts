@@ -1,0 +1,253 @@
+import type { Engine } from '@scene/core';
+import type { SurfaceRegistry, Surface } from '@scene/surfaces';
+import { createGhostFromSurface } from '@scene/surfaces';
+
+export interface TransitionRequest {
+  from: string;
+  to: string;
+  // TODO: Add effect config when screen integration is wired
+}
+
+export type TransitionStatus = 'completed' | 'cancelled' | 'timeout' | 'failed';
+
+export interface TransitionResult {
+  status: TransitionStatus;
+  from: string;
+  to: string;
+  error?: unknown;
+}
+
+export interface TransitionCallbacks {
+  navigate: () => void | Promise<void>;
+  ready: () => void | Promise<void>;
+  timeoutMs?: number;
+  signal?: AbortSignal;
+  onCancel?: () => void;
+}
+
+export interface TransitionOptions {
+  surfaceRegistry: SurfaceRegistry;
+  defaultTimeoutMs?: number;
+}
+
+interface ActiveTransition {
+  request: TransitionRequest;
+  abortController: AbortController;
+  timeoutId: number | null;
+  ghosts: Surface[];
+}
+
+/**
+ * TransitionCoordinator
+ *
+ * Implements the navigation protocol:
+ * 1. Exit visuals (ghost surfaces)
+ * 2. navigate()
+ * 3. wait for ready()
+ * 4. cleanup + emit completion
+ *
+ * Supports timeout override, cancellation, and emits events
+ * via Engine's EventBus.
+ */
+export class TransitionCoordinator {
+  private engine: Engine;
+  private registry: SurfaceRegistry;
+  private defaultTimeoutMs: number;
+  private active: ActiveTransition | null = null;
+  private ghostCounter = 0;
+
+  constructor(engine: Engine, options: TransitionOptions) {
+    this.engine = engine;
+    this.registry = options.surfaceRegistry;
+    this.defaultTimeoutMs = options.defaultTimeoutMs ?? 5000;
+
+    // Expose on engine for scene.nav usage
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (this.engine as any)._setNavigation?.(this);
+  }
+
+  /**
+   * Start a navigation transition.
+   * Throws if another transition is already running.
+   */
+  async transition(
+    request: TransitionRequest,
+    callbacks: TransitionCallbacks
+  ): Promise<TransitionResult> {
+    if (this.active) {
+      return {
+        status: 'failed',
+        from: request.from,
+        to: request.to,
+        error: new Error('Transition already in progress'),
+      };
+    }
+
+    const abortController = new AbortController();
+    const mergedSignal = this.mergeSignals(callbacks.signal, abortController.signal);
+
+    const timeoutMs = callbacks.timeoutMs ?? this.defaultTimeoutMs;
+    const timeoutId =
+      timeoutMs > 0
+        ? window.setTimeout(() => {
+            this.cancel('timeout');
+          }, timeoutMs)
+        : null;
+
+    const ghosts = this.captureGhostSurfaces();
+    this.active = {
+      request,
+      abortController,
+      timeoutId,
+      ghosts,
+    };
+
+    this.engine.events.emit('transition:start', { from: request.from, to: request.to });
+
+    try {
+      await this.runStep('navigate', callbacks.navigate, mergedSignal);
+      await this.runStep('ready', callbacks.ready, mergedSignal);
+
+      if (mergedSignal.aborted) {
+        const reason = mergedSignal.reason ?? 'cancelled';
+        callbacks.onCancel?.();
+        this.cleanup();
+        return {
+          status: reason === 'timeout' ? 'timeout' : 'cancelled',
+          from: request.from,
+          to: request.to,
+        };
+      }
+
+      this.cleanup();
+      this.engine.events.emit('transition:complete', { to: request.to });
+      return { status: 'completed', from: request.from, to: request.to };
+    } catch (error) {
+      this.cleanup();
+
+      // Distinguish abort-induced rejections from real errors
+      const reason = error === 'timeout' || error === 'manual' ? error : null;
+      if (reason) {
+        callbacks.onCancel?.();
+        return {
+          status: reason === 'timeout' ? 'timeout' : 'cancelled',
+          from: request.from,
+          to: request.to,
+        };
+      }
+
+      // Don't call onCancel for real errors - only for cancel/timeout
+      this.engine.events.emit('error', {
+        message: 'Navigation transition failed',
+        error: error instanceof Error ? error : new Error(String(error)),
+      });
+      return { status: 'failed', from: request.from, to: request.to, error };
+    }
+  }
+
+  /**
+   * Cancel the active transition.
+   */
+  cancel(reason: 'timeout' | 'manual' = 'manual'): void {
+    if (!this.active) return;
+    this.active.abortController.abort(reason);
+  }
+
+  private async runStep(
+    label: string,
+    step: () => void | Promise<void>,
+    signal: AbortSignal
+  ): Promise<void> {
+    if (signal.aborted) {
+      throw signal.reason ?? new Error(`${label} aborted`);
+    }
+    const result = step();
+    if (result instanceof Promise) {
+      await Promise.race([
+        result,
+        new Promise<void>((_, reject) => {
+          signal.addEventListener('abort', () => reject(signal.reason ?? 'aborted'), {
+            once: true,
+          });
+        }),
+      ]);
+    }
+  }
+
+  private mergeSignals(signalA: AbortSignal | undefined, signalB: AbortSignal): AbortSignal {
+    if (!signalA) return signalB;
+    if (signalA.aborted) return signalA;
+
+    const controller = new AbortController();
+
+    const forwardAbort = (signal: AbortSignal) => {
+      signal.addEventListener(
+        'abort',
+        () => {
+          controller.abort(signal.reason);
+        },
+        { once: true }
+      );
+    };
+
+    forwardAbort(signalA);
+    forwardAbort(signalB);
+
+    return controller.signal;
+  }
+
+  /**
+   * Capture ghost surfaces from all regular surfaces.
+   */
+  private captureGhostSurfaces(): Surface[] {
+    const ghosts: Surface[] = [];
+    const regularSurfaces = this.registry.regular();
+
+    for (const surface of regularSurfaces) {
+      try {
+        const ghostId = this.makeGhostId(surface.id);
+        const ghost = createGhostFromSurface(ghostId, surface);
+        this.registry.add(ghost);
+        ghosts.push(ghost);
+      } catch (error) {
+        console.warn('Failed to create ghost surface', error);
+      }
+    }
+
+    return ghosts;
+  }
+
+  private makeGhostId(sourceId: string): string {
+    this.ghostCounter += 1;
+    return `ghost-${sourceId}-${this.ghostCounter}`;
+  }
+
+  /**
+   * Cleanup active transition: remove ghosts, clear timeout.
+   */
+  private cleanup(): void {
+    if (!this.active) return;
+
+    if (this.active.timeoutId !== null) {
+      clearTimeout(this.active.timeoutId);
+    }
+
+    for (const ghost of this.active.ghosts) {
+      this.registry.remove(ghost.id);
+      ghost.destroy();
+    }
+
+    this.active = null;
+  }
+
+  /**
+   * Destroy the coordinator and cancel any active transition.
+   */
+  destroy(): void {
+    if (this.active) {
+      this.cancel('manual');
+      this.cleanup();
+    }
+    this.ghostCounter = 0;
+  }
+}

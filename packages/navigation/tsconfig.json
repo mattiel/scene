@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "types": ["@webgpu/types"],
+    "paths": {
+      "@scene/core": ["../core/dist/index.d.ts"],
+      "@scene/surfaces": ["../surfaces/dist/index.d.ts"]
+    }
+  },
+  "include": ["src/**/*"],
+  "references": [
+    { "path": "../core" },
+    { "path": "../surfaces" }
+  ]
+}

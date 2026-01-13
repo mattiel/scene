@@ -20,8 +20,16 @@ Invoke before pushing to scan changed files for bugs.
    - `packages/renderer/`, `packages/screen/` → check @webgpu bug patterns
    - `packages/surfaces/` → check @surfaces bug patterns
    - `packages/input/` → check @input bug patterns
+   - `packages/navigation/` → check navigation protocol patterns
    - `packages/a11y/` → check @a11y bug patterns
 5. Report findings with file:line references
+
+## Verification (after fixes)
+
+When fixes are applied, re-run review on fixed files:
+1. Confirm reported bug is resolved
+2. Check fix didn't introduce new issues
+3. Mark findings as `[FIXED]` or report new issues
 
 ## General Bug Patterns
 

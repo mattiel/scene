@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>@scene/navigation - Automated Transition Check</title>
+  <style>
+    body { font-family: monospace; background: #0b1220; color: #e2e8f0; padding: 20px; }
+    .result { padding: 10px; border-radius: 8px; margin: 6px 0; }
+    .pass { background: #0f5132; color: #d1fae5; }
+    .fail { background: #512406; color: #fee2e2; }
+  </style>
+</head>
+<body>
+  <h1>@scene/navigation - Automated Transition Check</h1>
+  <div id="results"></div>
+
+  <script type="module">
+    import { Engine } from '../../../core/dist/index.js';
+    import { Surface, SurfaceRegistry } from '../../../surfaces/dist/index.js';
+    import { TransitionCoordinator } from '../../dist/index.js';
+
+    const resultsEl = document.getElementById('results');
+    const report = (label, pass, detail = '') => {
+      const div = document.createElement('div');
+      div.className = `result ${pass ? 'pass' : 'fail'}`;
+      div.textContent = `${pass ? 'PASS' : 'FAIL'} - ${label}${detail ? ` (${detail})` : ''}`;
+      resultsEl.appendChild(div);
+    };
+
+    // Setup
+    const engine = new Engine({ autoStart: false });
+    const registry = new SurfaceRegistry();
+    registry.add(new Surface('auto-1', createBox('Box 1')));
+    registry.add(new Surface('auto-2', createBox('Box 2')));
+
+    document.body.appendChild(document.createElement('hr'));
+
+    const coordinator = new TransitionCoordinator(engine, {
+      surfaceRegistry: registry,
+      defaultTimeoutMs: 500,
+    });
+
+    const tests = [
+      async () => {
+        const result = await coordinator.transition(
+          { from: '/a', to: '/b' },
+          {
+            navigate: () => {},
+            ready: () => Promise.resolve(),
+          }
+        );
+        report('completes happy path', result.status === 'completed', result.status);
+      },
+      async () => {
+        const result = await coordinator.transition(
+          { from: '/c', to: '/d' },
+          {
+            navigate: () => {},
+            ready: () => new Promise((resolve) => setTimeout(resolve, 1000)),
+            timeoutMs: 50,
+          }
+        );
+        report('times out when ready is slow', result.status === 'timeout', result.status);
+      },
+      async () => {
+        const resultPromise = coordinator.transition(
+          { from: '/e', to: '/f' },
+          {
+            navigate: () => {},
+            ready: () => new Promise((resolve) => setTimeout(resolve, 300)),
+          }
+        );
+        coordinator.cancel();
+        const result = await resultPromise;
+        report('supports manual cancel', result.status === 'cancelled', result.status);
+      },
+    ];
+
+    run();
+
+    async function run() {
+      for (const test of tests) {
+        try {
+          await test();
+        } catch (error) {
+          report('unexpected error', false, error?.message ?? String(error));
+        }
+      }
+    }
+
+    function createBox(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      div.style.width = '120px';
+      div.style.height = '80px';
+      div.style.marginBottom = '8px';
+      div.style.background = '#1e293b';
+      div.style.display = 'grid';
+      div.style.placeItems = 'center';
+      div.style.borderRadius = '8px';
+      return div;
+    }
+  </script>
+</body>
+</html>
