@@ -124,14 +124,16 @@ export class Picking {
 
   /**
    * Test if a point is inside a surface rect
+   * Uses half-open interval [left, right) x [top, bottom) - standard convention
+   * that prevents adjacent surfaces from both matching edge points.
    */
   private hitTest(surface: PickableSurface, x: number, y: number): boolean {
     const rect = surface.rect;
     return (
       x >= rect.x &&
-      x <= rect.x + rect.width &&
+      x < rect.x + rect.width &&
       y >= rect.y &&
-      y <= rect.y + rect.height
+      y < rect.y + rect.height
     );
   }
 

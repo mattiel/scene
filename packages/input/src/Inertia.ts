@@ -225,9 +225,12 @@ export class Inertia {
     this.velocityY = vy;
     
     // Check if we have enough velocity to animate
+    // Note: We preserve velocityX/Y even if below threshold so consumers
+    // can read the actual drag velocity via getState()
     const speed = Math.sqrt(vx * vx + vy * vy);
     if (speed < this.options.minVelocity) {
-      this.stop();
+      // Don't call stop() here - it would zero out the velocity values
+      // that consumers need. Just don't start the animation.
       return;
     }
     

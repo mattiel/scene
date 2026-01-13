@@ -189,7 +189,9 @@ export class InputManager {
   ): void {
     const listeners = this.intentListeners.get(intent);
     if (listeners) {
-      for (const callback of listeners) {
+      // Create a copy to avoid issues if listeners modify the set during iteration
+      const listenersToCall = [...listeners];
+      for (const callback of listenersToCall) {
         try {
           callback(payload);
         } catch (error) {
