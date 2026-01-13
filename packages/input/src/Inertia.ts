@@ -269,9 +269,11 @@ export class Inertia {
     this.x += this.velocityX * dt;
     this.y += this.velocityY * dt;
     
-    // Apply friction
-    this.velocityX *= this.options.friction;
-    this.velocityY *= this.options.friction;
+    // Apply friction (time-normalized to ensure consistent physics across refresh rates)
+    // Normalize to 60Hz frame time (16.67ms) so friction behaves the same at any refresh rate
+    const normalizedFriction = Math.pow(this.options.friction, dt / 16.67);
+    this.velocityX *= normalizedFriction;
+    this.velocityY *= normalizedFriction;
     
     // Apply bounds
     this.applyBounds();
