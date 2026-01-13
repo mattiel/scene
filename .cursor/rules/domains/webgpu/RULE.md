@@ -31,6 +31,19 @@ alwaysApply: false
 3) Record passes, batch draws, minimize barriers
 4) Cleanup resources on teardown
 
+## Bug Patterns
+
+Look for these when reviewing renderer/screen code:
+
+- **Leaked GPU resources**: buffer/texture created without corresponding destroy() in cleanup
+- **Missing device loss handler**: device used without deviceLost listener registered
+- **Stale pipeline**: pipeline created before device ready or after device lost
+- **Unguarded GPU calls**: writeBuffer/submit without checking device validity
+- **Texture format mismatch**: source/target formats don't match pipeline expectations
+- **Missing await on async init**: using context/device before initialize() resolves
+- **Bind group reuse**: creating new bind groups per frame instead of caching
+- **Missing encoder finish**: commandEncoder.finish() not called before submit
+
 ## Checklist
 - [ ] Fallback path works
 - [ ] No validation errors
