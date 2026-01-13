@@ -176,11 +176,16 @@ export const zoomShader: ShaderModule = {
         alphaTo = 0.0;
       }
       
-      return mix(
-        colorFrom * alphaFrom,
-        colorTo * alphaTo,
-        params.progress
-      );
+      // Handle edge cases: when one texture is out of bounds, show the other at full intensity
+      if (alphaFrom == 0.0) {
+        return colorTo * alphaTo;
+      }
+      if (alphaTo == 0.0) {
+        return colorFrom * alphaFrom;
+      }
+      
+      // Both textures are in bounds: blend based on progress
+      return mix(colorFrom, colorTo, params.progress);
     }
   `,
   entryPoints: { fragment: 'main' },
