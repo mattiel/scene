@@ -65,6 +65,8 @@ export interface PointerManagerCallbacks {
   onPointerUp?: (pointer: NormalizedPointer) => void;
   /** Called on pointer cancel */
   onPointerCancel?: (pointer: NormalizedPointer) => void;
+  /** Called when pointer leaves the target element (no button pressed) */
+  onPointerLeave?: () => void;
   /** Called when drag starts */
   onDragStart?: (gesture: GestureState, pointer: NormalizedPointer) => void;
   /** Called during drag */
@@ -112,6 +114,7 @@ export class PointerManager {
   private handlePointerMove: (e: PointerEvent) => void;
   private handlePointerUp: (e: PointerEvent) => void;
   private handlePointerCancel: (e: PointerEvent) => void;
+  private handlePointerLeave: (e: PointerEvent) => void;
   
   // Attached state
   private attached: boolean = false;
@@ -137,6 +140,7 @@ export class PointerManager {
     this.handlePointerMove = this.onPointerMove.bind(this);
     this.handlePointerUp = this.onPointerUp.bind(this);
     this.handlePointerCancel = this.onPointerCancel.bind(this);
+    this.handlePointerLeave = this.onPointerLeave.bind(this);
   }
 
   /**
@@ -149,6 +153,7 @@ export class PointerManager {
     this.target.addEventListener('pointermove', this.handlePointerMove);
     this.target.addEventListener('pointerup', this.handlePointerUp);
     this.target.addEventListener('pointercancel', this.handlePointerCancel);
+    this.target.addEventListener('pointerleave', this.handlePointerLeave);
     
     // Prevent default touch actions for smoother interaction
     this.originalTouchAction = this.target.style.touchAction;
@@ -167,6 +172,7 @@ export class PointerManager {
     this.target.removeEventListener('pointermove', this.handlePointerMove);
     this.target.removeEventListener('pointerup', this.handlePointerUp);
     this.target.removeEventListener('pointercancel', this.handlePointerCancel);
+    this.target.removeEventListener('pointerleave', this.handlePointerLeave);
     
     // Release any captured pointers
     for (const pointerId of this.pointers.keys()) {
@@ -385,6 +391,19 @@ export class PointerManager {
     this.previousPointers.delete(pointer.id);
     
     this.callbacks.onPointerCancel?.(pointer);
+  }
+
+  /**
+   * Handle pointer leave event
+   * Only fires when no buttons are pressed (hover leave, not drag leave)
+   */
+  private onPointerLeave(e: PointerEvent): void {
+    // Only handle leave when no buttons are pressed
+    // During drag, pointer capture keeps events flowing even outside element
+    if (e.buttons === 0 && this.pointers.size === 0) {
+      this.previousPointers.delete(e.pointerId);
+      this.callbacks.onPointerLeave?.();
+    }
   }
 
   /**

@@ -93,8 +93,8 @@ export class Picking {
   private options: Required<PickingOptions>;
   private callbacks: PickingCallbacks;
   
-  // Hover tracking
-  private hoveredSurfaces: Set<string> = new Set();
+  // Hover tracking - stores both ID and surface reference for O(1) leave lookup
+  private hoveredSurfaces: Map<string, PickableSurface> = new Map();
 
   constructor(callbacks: PickingCallbacks = {}, options: PickingOptions = {}) {
     this.callbacks = callbacks;
@@ -154,8 +154,8 @@ export class Picking {
 
   /**
    * Pick surfaces at a point
-   * @param x - X coordinate (viewport or element-relative)
-   * @param y - Y coordinate (viewport or element-relative)
+   * @param x - X coordinate (element-relative)
+   * @param y - Y coordinate (element-relative)
    * @returns Array of pick results, sorted by z-index descending
    */
   pick(x: number, y: number): PickResult[] {
@@ -195,7 +195,7 @@ export class Picking {
    * Handle pointer move (for hover tracking and onPick)
    */
   handlePointerMove(pointer: NormalizedPointer): PickEvent {
-    const hits = this.pick(pointer.clientX, pointer.clientY);
+    const hits = this.pick(pointer.x, pointer.y);
     const event: PickEvent = {
       hits,
       topHit: hits.length > 0 ? hits[0] : null,
@@ -204,26 +204,25 @@ export class Picking {
     
     // Track hover state
     if (this.options.trackHover) {
-      const currentHovered = new Set(hits.map(h => h.surface.id));
+      const currentHoveredIds = new Set(hits.map(h => h.surface.id));
       
-      // Find surfaces we left
-      for (const id of this.hoveredSurfaces) {
-        if (!currentHovered.has(id)) {
-          const surface = this.registry?.all().find(s => s.id === id);
-          if (surface) {
-            this.callbacks.onLeave?.(surface, event);
-          }
+      // Find surfaces we left (O(1) lookup using cached surface reference)
+      for (const [id, surface] of this.hoveredSurfaces) {
+        if (!currentHoveredIds.has(id)) {
+          this.callbacks.onLeave?.(surface, event);
         }
       }
       
-      // Find surfaces we entered
+      // Find surfaces we entered and build new hover map
+      const newHovered = new Map<string, PickableSurface>();
       for (const hit of hits) {
+        newHovered.set(hit.surface.id, hit.surface);
         if (!this.hoveredSurfaces.has(hit.surface.id)) {
           this.callbacks.onEnter?.(hit.surface, event);
         }
       }
       
-      this.hoveredSurfaces = currentHovered;
+      this.hoveredSurfaces = newHovered;
     }
     
     this.callbacks.onPick?.(event);
@@ -235,7 +234,7 @@ export class Picking {
    * Handle pointer down
    */
   handlePointerDown(pointer: NormalizedPointer): PickEvent {
-    const hits = this.pick(pointer.clientX, pointer.clientY);
+    const hits = this.pick(pointer.x, pointer.y);
     const event: PickEvent = {
       hits,
       topHit: hits.length > 0 ? hits[0] : null,
@@ -251,7 +250,7 @@ export class Picking {
    * Handle pointer up
    */
   handlePointerUp(pointer: NormalizedPointer): PickEvent {
-    const hits = this.pick(pointer.clientX, pointer.clientY);
+    const hits = this.pick(pointer.x, pointer.y);
     const event: PickEvent = {
       hits,
       topHit: hits.length > 0 ? hits[0] : null,
@@ -265,8 +264,35 @@ export class Picking {
 
   /**
    * Clear hover state (call when pointer leaves target area)
+   * @param emitLeave - Whether to emit onLeave callbacks for hovered surfaces (default: true)
    */
-  clearHover(): void {
+  clearHover(emitLeave: boolean = true): void {
+    if (emitLeave && this.callbacks.onLeave && this.hoveredSurfaces.size > 0) {
+      // Create a synthetic event for leave callbacks
+      const syntheticPointer: NormalizedPointer = {
+        id: -1,
+        x: -1,
+        y: -1,
+        clientX: -1,
+        clientY: -1,
+        deltaX: 0,
+        deltaY: 0,
+        type: 'mouse',
+        pressure: 0,
+        isPrimary: true,
+        timestamp: performance.now(),
+      };
+      const event: PickEvent = {
+        hits: [],
+        topHit: null,
+        pointer: syntheticPointer,
+      };
+      
+      for (const surface of this.hoveredSurfaces.values()) {
+        this.callbacks.onLeave(surface, event);
+      }
+    }
+    
     this.hoveredSurfaces.clear();
   }
 
@@ -274,7 +300,7 @@ export class Picking {
    * Get currently hovered surface IDs
    */
   getHovered(): string[] {
-    return Array.from(this.hoveredSurfaces);
+    return Array.from(this.hoveredSurfaces.keys());
   }
 
   /**

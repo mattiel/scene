@@ -131,6 +131,18 @@ export class InputManager {
       throw new Error('InputManager requires a target element');
     }
     
+    // Clean up existing state if re-initializing
+    if (this.pointerManager) {
+      this.pointerManager.destroy();
+      this.pointerManager = null;
+      
+      // Reset related state that's now stale (don't emit leave events during cleanup)
+      this.inertia.stop();
+      this.picking.clearHover(false);
+      this.dragStartSurfaceId = null;
+      this.dragActive = false;
+    }
+    
     // Create pointer manager
     this.pointerManager = new PointerManager(
       actualTarget,
@@ -200,6 +212,12 @@ export class InputManager {
       },
       onPointerUp: (pointer) => {
         this.onPointerUp(pointer);
+      },
+      onPointerCancel: (pointer) => {
+        this.onPointerCancel(pointer);
+      },
+      onPointerLeave: () => {
+        this.onPointerLeave();
       },
       onDragStart: (gesture, pointer) => {
         this.onDragStart(gesture, pointer);
@@ -290,6 +308,40 @@ export class InputManager {
 
     // Reset drag tracking for the next sequence
     this.dragActive = false;
+  }
+
+  /**
+   * Handle pointer cancel
+   * Called when a pointer is cancelled (e.g., system gesture, browser interruption).
+   * Resets drag state without emitting tap intent.
+   */
+  private onPointerCancel(pointer: NormalizedPointer): void {
+    // Emit core event
+    this.eventBus.emit('pointer:cancel', {
+      x: pointer.x,
+      y: pointer.y,
+      surfaceId: undefined,
+    });
+    
+    // Stop any inertia animation
+    this.inertia.stop();
+    
+    // Reset drag tracking for the next sequence
+    // Note: dragEnd was already called by PointerManager, but we need to reset dragActive
+    // since onPointerUp won't be called for cancelled pointers
+    this.dragActive = false;
+    this.dragStartSurfaceId = null;
+  }
+
+  /**
+   * Handle pointer leave
+   * Called when pointer exits the target element without any button pressed.
+   */
+  private onPointerLeave(): void {
+    // Clear hover states and emit leave events
+    if (this.isCanvasMode && this.config.enablePicking) {
+      this.picking.clearHover(true);
+    }
   }
 
   /**
