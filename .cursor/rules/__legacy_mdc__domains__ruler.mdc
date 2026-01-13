@@ -1,8 +1,9 @@
-<!-- AUTO-GENERATED from domains/ruler/RULE.md - DO NOT EDIT -->
 ---
 description: "Rule maintenance constraints for .cursor/rules/"
 alwaysApply: false
 ---
+
+<!-- Source: domains/ruler/RULE.md -->
 
 # Rule Maintenance
 

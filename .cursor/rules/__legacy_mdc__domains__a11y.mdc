@@ -1,8 +1,9 @@
-<!-- AUTO-GENERATED from domains/a11y/RULE.md - DO NOT EDIT -->
 ---
 description: "Accessibility constraints for a11y package"
 alwaysApply: false
 ---
+
+<!-- Source: domains/a11y/RULE.md -->
 
 # Accessibility
 

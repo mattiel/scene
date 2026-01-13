@@ -32,7 +32,11 @@ async function main() {
     const flatName = relativePath.replace(/\//g, '__').replace('__RULE.md', '');
     const mdcPath = join(RULES_DIR, `${PREFIX}${flatName}.mdc`);
 
-    const mdcContent = `<!-- AUTO-GENERATED from ${relativePath} - DO NOT EDIT -->\n${content}`;
+    // Insert source comment after frontmatter to preserve YAML parsing
+    const mdcContent = content.replace(
+      /^(---\n[\s\S]*?\n---)/,
+      `$1\n\n<!-- Source: ${relativePath} -->`
+    );
     await writeFile(mdcPath, mdcContent);
     console.log(`Generated: ${mdcPath}`);
   }

@@ -1,8 +1,9 @@
-<!-- AUTO-GENERATED from git-workflow/RULE.md - DO NOT EDIT -->
 ---
 description: "Git workflow standards - branching, commits, and PR practices"
 alwaysApply: true
 ---
+
+<!-- Source: git-workflow/RULE.md -->
 
 # Git Workflow Standards
 

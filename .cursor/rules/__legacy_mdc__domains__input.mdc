@@ -1,8 +1,9 @@
-<!-- AUTO-GENERATED from domains/input/RULE.md - DO NOT EDIT -->
 ---
 description: "Input and picking constraints for input package"
 alwaysApply: false
 ---
+
+<!-- Source: domains/input/RULE.md -->
 
 # Input Handling
 

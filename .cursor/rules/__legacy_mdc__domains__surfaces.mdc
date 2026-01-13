@@ -1,8 +1,9 @@
-<!-- AUTO-GENERATED from domains/surfaces/RULE.md - DO NOT EDIT -->
 ---
 description: "Surface and DOM tracking constraints for surfaces package"
 alwaysApply: false
 ---
+
+<!-- Source: domains/surfaces/RULE.md -->
 
 # Surface Tracking
 

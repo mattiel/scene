@@ -1,9 +1,10 @@
-<!-- AUTO-GENERATED from typescript/RULE.md - DO NOT EDIT -->
 ---
 description: "TypeScript coding standards for Scene packages"
 globs: ["**/*.ts", "**/*.tsx", "**/*.d.ts"]
 alwaysApply: false
 ---
+
+<!-- Source: typescript/RULE.md -->
 
 # TypeScript Standards
 

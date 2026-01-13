@@ -1,8 +1,9 @@
-<!-- AUTO-GENERATED from scene/RULE.md - DO NOT EDIT -->
 ---
 description: "Scene context - DOM-first cinematic effects engine using WebGPU"
 alwaysApply: true
 ---
+
+<!-- Source: scene/RULE.md -->
 
 # Scene
 

@@ -1,8 +1,9 @@
-<!-- AUTO-GENERATED from domains/webgpu/RULE.md - DO NOT EDIT -->
 ---
 description: "WebGPU rendering constraints for renderer and screen packages"
 alwaysApply: false
 ---
+
+<!-- Source: domains/webgpu/RULE.md -->
 
 # WebGPU Rendering
 
