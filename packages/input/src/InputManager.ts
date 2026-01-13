@@ -55,11 +55,23 @@ export interface InputManagerConfig {
 }
 
 /**
+ * Resolved config with defaults applied
+ * (target and registry remain optional at runtime)
+ */
+interface ResolvedConfig {
+  target: HTMLElement | undefined;
+  enablePicking: boolean;
+  enableInertia: boolean;
+  inertiaOptions: InertiaOptions;
+  registry: PickableRegistry | undefined;
+}
+
+/**
  * InputManager - High-level input coordinator
  */
 export class InputManager {
   private eventBus: EventBus;
-  private config: Required<InputManagerConfig>;
+  private config: ResolvedConfig;
   
   // Subsystems
   private pointerManager: PointerManager | null = null;
@@ -84,8 +96,8 @@ export class InputManager {
       enablePicking: config.enablePicking ?? true,
       enableInertia: config.enableInertia ?? true,
       inertiaOptions: config.inertiaOptions ?? {},
-      registry: config.registry ?? undefined,
-    } as Required<InputManagerConfig>;
+      registry: config.registry,
+    };
     
     // Initialize subsystems
     this.inertia = new Inertia(this.config.inertiaOptions);
