@@ -152,11 +152,11 @@ export const zoomShader: ShaderModule = {
     ) -> @location(0) vec4f {
       let center: vec2f = vec2f(0.5, 0.5);
       
-      // Zoom out from source
+      // Zoom out from source (multiply UV by increasing value to sample larger area = zoom out)
       let zoomFrom: f32 = 1.0 + params.progress * params.zoomAmount;
-      let uvFrom: vec2f = (uv - center) / zoomFrom + center;
+      let uvFrom: vec2f = (uv - center) * zoomFrom + center;
       
-      // Zoom in to destination
+      // Zoom in to destination (divide UV by decreasing value to sample smaller area = zoom in)
       let zoomTo: f32 = 1.0 + (1.0 - params.progress) * params.zoomAmount;
       let uvTo: vec2f = (uv - center) / zoomTo + center;
       

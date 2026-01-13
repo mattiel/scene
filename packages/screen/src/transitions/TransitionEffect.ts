@@ -130,6 +130,9 @@ export class TransitionEffect {
       // Create pipeline
       this.createPipeline();
 
+      // Initialize uniform buffer with default configuration values
+      this.updateUniforms();
+
       this.initialized = true;
       return true;
     } catch (error: unknown) {
@@ -297,6 +300,7 @@ export class TransitionEffect {
 
     if (this.initialized) {
       this.createPipeline();
+      this.updateUniforms();
     }
   }
 
