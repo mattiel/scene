@@ -344,7 +344,7 @@ export class InputManager {
       velocityY,
     });
     
-    this.dragActive = false;
+    // Note: dragActive is reset in onPointerUp after the tap check
     this.dragStartSurfaceId = null;
   }
 
