@@ -259,8 +259,10 @@ export class LayoutTracker {
     }
     
     this._rafHandle = requestAnimationFrame(() => {
-      this.flushUpdates();
+      // Reset handle BEFORE flushing to ensure future updates can be scheduled
+      // even if flushUpdates() throws (e.g., from a user's onLayoutChange callback)
       this._rafHandle = null;
+      this.flushUpdates();
     });
   }
 

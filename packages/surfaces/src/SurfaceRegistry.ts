@@ -106,14 +106,14 @@ export class SurfaceRegistry {
   /**
    * Get all surfaces sorted by z-index (ascending)
    * This is useful for rendering in the correct order
-   * @returns Array of surfaces sorted by z-index
+   * @returns Array of surfaces sorted by z-index (copy, safe to modify)
    */
   sorted(): Surface[] {
     if (this._needsSort) {
       this._sortedSurfaces.sort((a, b) => a.zIndex - b.zIndex);
       this._needsSort = false;
     }
-    return this._sortedSurfaces;
+    return [...this._sortedSurfaces];
   }
 
   /**
