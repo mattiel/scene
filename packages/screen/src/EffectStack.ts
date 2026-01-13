@@ -81,6 +81,12 @@ export class EffectStack {
       return false;
     }
 
+    // initialize() can be called multiple times (e.g. renderer re-creation).
+    // Clean up previously-created resources to avoid orphaning effects.
+    if (this.initialized || this.passthroughEffectHandle) {
+      this.destroy();
+    }
+
     // Create passthrough effect for when all effects are disabled
     try {
       this.passthroughEffectHandle = this.screenPass.createEffect({
