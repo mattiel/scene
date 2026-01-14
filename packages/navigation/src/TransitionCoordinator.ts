@@ -322,5 +322,9 @@ export class TransitionCoordinator {
       this.cleanup();
     }
     this.ghostCounter = 0;
+
+    // Unregister from engine to allow GC and prevent stale access via engine.nav
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (this.engine as any)._setNavigation?.(null);
   }
 }
