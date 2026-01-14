@@ -100,7 +100,22 @@ export class TransitionCoordinator {
           }, timeoutMs)
         : null;
 
-    const ghosts = this.captureGhostSurfaces();
+    // Capture ghosts - if this fails, clear timeout before returning to prevent orphaned timer
+    let ghosts: Surface[];
+    try {
+      ghosts = this.captureGhostSurfaces();
+    } catch (error) {
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+      }
+      cleanupSignals();
+      this.engine.events.emit('error', {
+        message: 'Failed to capture ghost surfaces',
+        error: error instanceof Error ? error : new Error(String(error)),
+      });
+      return { status: 'failed', from: request.from, to: request.to, error };
+    }
+
     this.transitionCounter += 1;
     const transitionId = this.transitionCounter;
     this.active = {
@@ -133,11 +148,11 @@ export class TransitionCoordinator {
       this.engine.events.emit('transition:complete', { to: request.to });
       return { status: 'completed', from: request.from, to: request.to };
     } catch (error) {
-      this.cleanup(transitionId);
-
       // Check if this was an abort (internal timeout/cancel OR user signal)
       if (mergedSignal.aborted) {
+        // Call onCancel BEFORE cleanup so callback can observe this.active and ghosts
         callbacks.onCancel?.();
+        this.cleanup(transitionId);
         // Internal timeout sets reason to 'timeout'; all other aborts are cancellations
         const isTimeout = mergedSignal.reason === 'timeout';
         return {
@@ -146,6 +161,9 @@ export class TransitionCoordinator {
           to: request.to,
         };
       }
+
+      // Non-abort error: cleanup after checking abort status
+      this.cleanup(transitionId);
 
       // Real error (not abort-related)
       this.engine.events.emit('error', {
