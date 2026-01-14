@@ -35,6 +35,7 @@ interface ActiveTransition {
   abortController: AbortController;
   timeoutId: number | null;
   ghosts: Surface[];
+  cleanupSignals: () => void;
 }
 
 /**
@@ -103,6 +104,7 @@ export class TransitionCoordinator {
       abortController,
       timeoutId,
       ghosts,
+      cleanupSignals,
     };
 
     this.engine.events.emit('transition:start', { from: request.from, to: request.to });
@@ -114,7 +116,7 @@ export class TransitionCoordinator {
       if (mergedSignal.aborted) {
         const reason = mergedSignal.reason ?? 'cancelled';
         callbacks.onCancel?.();
-        this.cleanup(cleanupSignals);
+        this.cleanup();
         return {
           status: reason === 'timeout' ? 'timeout' : 'cancelled',
           from: request.from,
@@ -122,24 +124,25 @@ export class TransitionCoordinator {
         };
       }
 
-      this.cleanup(cleanupSignals);
+      this.cleanup();
       this.engine.events.emit('transition:complete', { to: request.to });
       return { status: 'completed', from: request.from, to: request.to };
     } catch (error) {
-      this.cleanup(cleanupSignals);
+      this.cleanup();
 
-      // Distinguish abort-induced rejections from real errors
-      const reason = error === 'timeout' || error === 'manual' ? error : null;
-      if (reason) {
+      // Check if this was an abort (internal timeout/cancel OR user signal)
+      if (mergedSignal.aborted) {
         callbacks.onCancel?.();
+        // Internal timeout sets reason to 'timeout'; all other aborts are cancellations
+        const isTimeout = mergedSignal.reason === 'timeout';
         return {
-          status: reason === 'timeout' ? 'timeout' : 'cancelled',
+          status: isTimeout ? 'timeout' : 'cancelled',
           from: request.from,
           to: request.to,
         };
       }
 
-      // Don't call onCancel for real errors - only for cancel/timeout
+      // Real error (not abort-related)
       this.engine.events.emit('error', {
         message: 'Navigation transition failed',
         error: error instanceof Error ? error : new Error(String(error)),
@@ -166,14 +169,20 @@ export class TransitionCoordinator {
     }
     const result = step();
     if (result instanceof Promise) {
-      await Promise.race([
-        result,
-        new Promise<void>((_, reject) => {
-          signal.addEventListener('abort', () => reject(signal.reason ?? 'aborted'), {
-            once: true,
-          });
-        }),
-      ]);
+      let abortHandler: (() => void) | undefined;
+      const abortPromise = new Promise<void>((_, reject) => {
+        abortHandler = () => reject(signal.reason ?? 'aborted');
+        signal.addEventListener('abort', abortHandler, { once: true });
+      });
+
+      try {
+        await Promise.race([result, abortPromise]);
+      } finally {
+        // Remove listener to prevent unhandled rejection if abort fires after step completes
+        if (abortHandler) {
+          signal.removeEventListener('abort', abortHandler);
+        }
+      }
     }
   }
 
@@ -234,7 +243,7 @@ export class TransitionCoordinator {
   /**
    * Cleanup active transition: remove ghosts, clear timeout, remove signal listeners.
    */
-  private cleanup(cleanupSignals?: () => void): void {
+  private cleanup(): void {
     if (!this.active) return;
 
     if (this.active.timeoutId !== null) {
@@ -250,7 +259,7 @@ export class TransitionCoordinator {
       }
     }
 
-    cleanupSignals?.();
+    this.active.cleanupSignals();
     this.active = null;
   }
 
