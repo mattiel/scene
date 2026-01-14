@@ -36,6 +36,7 @@ interface ActiveTransition {
   timeoutId: number | null;
   ghosts: Surface[];
   cleanupSignals: () => void;
+  transitionId: number; // Unique ID per transition (prevents race condition cleanup)
 }
 
 /**
@@ -56,6 +57,7 @@ export class TransitionCoordinator {
   private defaultTimeoutMs: number;
   private active: ActiveTransition | null = null;
   private ghostCounter = 0;
+  private transitionCounter = 0; // Unique ID generator for transitions
 
   constructor(engine: Engine, options: TransitionOptions) {
     this.engine = engine;
@@ -99,12 +101,15 @@ export class TransitionCoordinator {
         : null;
 
     const ghosts = this.captureGhostSurfaces();
+    this.transitionCounter += 1;
+    const transitionId = this.transitionCounter;
     this.active = {
       request,
       abortController,
       timeoutId,
       ghosts,
       cleanupSignals,
+      transitionId,
     };
 
     this.engine.events.emit('transition:start', { from: request.from, to: request.to });
@@ -116,7 +121,7 @@ export class TransitionCoordinator {
       if (mergedSignal.aborted) {
         const reason = mergedSignal.reason ?? 'cancelled';
         callbacks.onCancel?.();
-        this.cleanup();
+        this.cleanup(transitionId);
         return {
           status: reason === 'timeout' ? 'timeout' : 'cancelled',
           from: request.from,
@@ -124,11 +129,11 @@ export class TransitionCoordinator {
         };
       }
 
-      this.cleanup();
+      this.cleanup(transitionId);
       this.engine.events.emit('transition:complete', { to: request.to });
       return { status: 'completed', from: request.from, to: request.to };
     } catch (error) {
-      this.cleanup();
+      this.cleanup(transitionId);
 
       // Check if this was an abort (internal timeout/cancel OR user signal)
       if (mergedSignal.aborted) {
@@ -242,9 +247,15 @@ export class TransitionCoordinator {
 
   /**
    * Cleanup active transition: remove ghosts, clear timeout, remove signal listeners.
+   * @param ownerId - If provided, only cleanup if this.active.transitionId matches (prevents race condition)
    */
-  private cleanup(): void {
+  private cleanup(ownerId?: number): void {
     if (!this.active) return;
+    
+    // If ownerId provided, only cleanup if we own this transition (prevents race condition)
+    if (ownerId !== undefined && this.active.transitionId !== ownerId) {
+      return;
+    }
 
     if (this.active.timeoutId !== null) {
       clearTimeout(this.active.timeoutId);
