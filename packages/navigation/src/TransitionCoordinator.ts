@@ -127,9 +127,8 @@ export class TransitionCoordinator {
       transitionId,
     };
 
-    this.engine.events.emit('transition:start', { from: request.from, to: request.to });
-
     try {
+      this.engine.events.emit('transition:start', { from: request.from, to: request.to });
       await this.runStep('navigate', callbacks.navigate, mergedSignal);
       await this.runStep('ready', callbacks.ready, mergedSignal);
 
@@ -299,9 +298,14 @@ export class TransitionCoordinator {
     for (const ghost of this.active.ghosts) {
       try {
         this.registry.remove(ghost.id);
-        ghost.destroy();
       } catch (e) {
-        console.warn('Failed to cleanup ghost', ghost.id, e);
+        console.warn('Failed to remove ghost from registry', ghost.id, e);
+      } finally {
+        try {
+          ghost.destroy();
+        } catch (e) {
+          console.warn('Failed to destroy ghost', ghost.id, e);
+        }
       }
     }
 
