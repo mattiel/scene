@@ -135,7 +135,11 @@ export class TransitionCoordinator {
 
       if (mergedSignal.aborted) {
         const reason = mergedSignal.reason ?? 'cancelled';
-        callbacks.onCancel?.();
+        try {
+          callbacks.onCancel?.();
+        } catch (e) {
+          console.warn('onCancel callback threw', e);
+        }
         this.cleanup(transitionId);
         return {
           status: reason === 'timeout' ? 'timeout' : 'cancelled',
@@ -151,7 +155,11 @@ export class TransitionCoordinator {
       // Check if this was an abort (internal timeout/cancel OR user signal)
       if (mergedSignal.aborted) {
         // Call onCancel BEFORE cleanup so callback can observe this.active and ghosts
-        callbacks.onCancel?.();
+        try {
+          callbacks.onCancel?.();
+        } catch (e) {
+          console.warn('onCancel callback threw', e);
+        }
         this.cleanup(transitionId);
         // Internal timeout sets reason to 'timeout'; all other aborts are cancellations
         const isTimeout = mergedSignal.reason === 'timeout';
@@ -245,12 +253,21 @@ export class TransitionCoordinator {
     const regularSurfaces = this.registry.regular();
 
     for (const surface of regularSurfaces) {
+      let ghost: Surface | null = null;
       try {
         const ghostId = this.makeGhostId(surface.id);
-        const ghost = createGhostFromSurface(ghostId, surface);
+        ghost = createGhostFromSurface(ghostId, surface);
         this.registry.add(ghost);
         ghosts.push(ghost);
       } catch (error) {
+        // If ghost was created but registration failed, destroy it to prevent leak
+        if (ghost) {
+          try {
+            ghost.destroy();
+          } catch {
+            // Ignore destroy errors during rollback
+          }
+        }
         console.warn('Failed to create ghost surface', error);
       }
     }
