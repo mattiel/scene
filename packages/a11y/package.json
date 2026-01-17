@@ -1,0 +1,40 @@
+{
+  "name": "@scene/a11y",
+  "version": "0.0.1",
+  "description": "Accessibility layer for Scene - DOM mirrors, focus sync, and ARIA announcements",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite build --watch",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext .ts",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "clean": "rm -rf dist .turbo node_modules/.vite"
+  },
+  "keywords": [
+    "scene",
+    "accessibility",
+    "a11y",
+    "aria",
+    "screen-reader",
+    "keyboard-navigation"
+  ],
+  "author": "Mattie Lee",
+  "license": "MIT",
+  "dependencies": {
+    "@scene/core": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2",
+    "vite": "^6.0.7",
+    "vite-plugin-dts": "^4.4.0"
+  }
+}

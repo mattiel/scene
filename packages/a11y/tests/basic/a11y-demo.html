@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>@scene/a11y Demo</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a2e;
+      color: #eee;
+      min-height: 100vh;
+      padding: 20px;
+    }
+    
+    h1 {
+      margin-bottom: 8px;
+      color: #fff;
+    }
+    
+    .subtitle {
+      color: #888;
+      margin-bottom: 20px;
+    }
+    
+    .container {
+      display: flex;
+      gap: 20px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    
+    .demo-area {
+      flex: 1;
+    }
+    
+    .canvas-wrapper {
+      position: relative;
+      width: 600px;
+      height: 400px;
+      background: #0f0f23;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    
+    /* Simulated canvas surfaces */
+    .canvas-surface {
+      position: absolute;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: bold;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.3);
+      /* In Canvas-Interactive mode, surfaces don't receive pointer events */
+      pointer-events: none;
+    }
+    
+    .canvas-surface.selected {
+      box-shadow: 0 0 0 3px #4ade80;
+    }
+    
+    /* Mirror elements - transparent overlays for accessibility */
+    .scene-mirror {
+      position: absolute;
+      background: transparent;
+      border: none;
+      padding: 0;
+      margin: 0;
+      cursor: pointer;
+      outline: none;
+    }
+    
+    .scene-mirror:focus {
+      outline: 3px solid #4ade80;
+      outline-offset: 2px;
+    }
+    
+    .scene-mirror:focus-visible {
+      outline: 3px solid #4ade80;
+      outline-offset: 2px;
+    }
+    
+    .info-panel {
+      width: 320px;
+    }
+    
+    .panel {
+      background: #16213e;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    
+    .panel h3 {
+      margin-bottom: 12px;
+      color: #667eea;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    
+    .stat {
+      display: flex;
+      justify-content: space-between;
+      padding: 6px 0;
+      border-bottom: 1px solid #1a1a2e;
+    }
+    
+    .stat:last-child {
+      border-bottom: none;
+    }
+    
+    .stat-label {
+      color: #888;
+    }
+    
+    .stat-value {
+      font-family: 'Monaco', monospace;
+      color: #4ade80;
+    }
+    
+    .log {
+      height: 150px;
+      overflow-y: auto;
+      font-family: 'Monaco', monospace;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    
+    .log-entry {
+      padding: 2px 4px;
+      border-radius: 2px;
+    }
+    
+    .log-entry.select { color: #60a5fa; }
+    .log-entry.activate { color: #4ade80; }
+    .log-entry.announce { color: #f59e0b; }
+    .log-entry.mode { color: #a78bfa; }
+    
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 16px;
+    }
+    
+    button {
+      padding: 8px 16px;
+      background: #667eea;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background 0.2s;
+    }
+    
+    button:hover {
+      background: #5a67d8;
+    }
+    
+    button.active {
+      background: #4ade80;
+    }
+    
+    .instructions {
+      background: #16213e;
+      border-radius: 8px;
+      padding: 16px;
+      margin-top: 16px;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    
+    .instructions h4 {
+      color: #667eea;
+      margin-bottom: 8px;
+    }
+    
+    .instructions ul {
+      margin-left: 20px;
+      color: #aaa;
+    }
+    
+    .instructions kbd {
+      background: #0f0f23;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: 'Monaco', monospace;
+      font-size: 12px;
+    }
+    
+    /* Live region display (for debugging - normally hidden) */
+    .live-region-display {
+      margin-top: 16px;
+      padding: 12px;
+      background: #0f0f23;
+      border-radius: 6px;
+      font-style: italic;
+      color: #f59e0b;
+      min-height: 40px;
+    }
+  </style>
+</head>
+<body>
+  <h1>@scene/a11y Demo</h1>
+  <p class="subtitle">Accessibility layer for Canvas-Interactive mode</p>
+  
+  <div class="container">
+    <div class="demo-area">
+      <div class="canvas-wrapper" id="canvas-wrapper">
+        <!-- Simulated canvas surfaces (would be rendered by WebGPU in real usage) -->
+        <div class="canvas-surface" id="surface-card-1" style="left: 30px; top: 30px; width: 160px; height: 120px;">
+          Card 1
+        </div>
+        <div class="canvas-surface" id="surface-card-2" style="left: 220px; top: 30px; width: 160px; height: 120px;">
+          Card 2
+        </div>
+        <div class="canvas-surface" id="surface-card-3" style="left: 410px; top: 30px; width: 160px; height: 120px;">
+          Card 3
+        </div>
+        <div class="canvas-surface" id="surface-card-4" style="left: 125px; top: 180px; width: 160px; height: 120px;">
+          Card 4
+        </div>
+        <div class="canvas-surface" id="surface-card-5" style="left: 315px; top: 180px; width: 160px; height: 120px;">
+          Card 5
+        </div>
+        
+        <!-- Mirror container (mirrors will be created here) -->
+        <div id="mirror-container"></div>
+      </div>
+      
+      <div class="controls">
+        <button id="btn-mode-canvas" class="active">Canvas Mode (A11y Active)</button>
+        <button id="btn-mode-dom">DOM Mode (A11y Disabled)</button>
+        <button id="btn-clear-log">Clear Log</button>
+      </div>
+      
+      <div class="instructions">
+        <h4>Keyboard Navigation</h4>
+        <ul>
+          <li><kbd>Tab</kbd> / <kbd>Shift+Tab</kbd> - Move between cards</li>
+          <li><kbd>←</kbd> <kbd>→</kbd> - Navigate horizontally</li>
+          <li><kbd>Enter</kbd> / <kbd>Space</kbd> - Activate selected card</li>
+          <li><kbd>Home</kbd> - Go to first card</li>
+          <li><kbd>End</kbd> - Go to last card</li>
+        </ul>
+      </div>
+    </div>
+    
+    <div class="info-panel">
+      <div class="panel">
+        <h3>State</h3>
+        <div class="stat">
+          <span class="stat-label">Mode</span>
+          <span class="stat-value" id="current-mode">Canvas-Interactive</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Mirrors Enabled</span>
+          <span class="stat-value" id="mirrors-enabled">Yes</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Selected</span>
+          <span class="stat-value" id="selected-surface">None</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Reduced Motion</span>
+          <span class="stat-value" id="reduced-motion">No</span>
+        </div>
+      </div>
+      
+      <div class="panel">
+        <h3>Live Announcements</h3>
+        <div class="live-region-display" id="live-display">
+          (Screen reader announcements appear here)
+        </div>
+      </div>
+      
+      <div class="panel">
+        <h3>Event Log</h3>
+        <div class="log" id="log"></div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    // ============================================
+    // Inline implementation for demo purposes
+    // (In production, import from @scene/a11y)
+    // ============================================
+    
+    // LiveAnnouncer
+    class LiveAnnouncer {
+      constructor(config = {}) {
+        this.container = config.container ?? document.body;
+        this.clearDelay = config.clearDelay ?? 1000;
+        this.clearTimeoutId = null;
+        
+        this.politeRegion = this.createRegion('polite');
+        this.assertiveRegion = this.createRegion('assertive');
+        this.container.appendChild(this.politeRegion);
+        this.container.appendChild(this.assertiveRegion);
+      }
+      
+      createRegion(politeness) {
+        const region = document.createElement('div');
+        region.setAttribute('role', 'status');
+        region.setAttribute('aria-live', politeness);
+        region.setAttribute('aria-atomic', 'true');
+        Object.assign(region.style, {
+          position: 'absolute',
+          width: '1px',
+          height: '1px',
+          padding: '0',
+          margin: '-1px',
+          overflow: 'hidden',
+          clip: 'rect(0, 0, 0, 0)',
+          whiteSpace: 'nowrap',
+          border: '0',
+        });
+        region.className = `scene-live-region scene-live-region--${politeness}`;
+        return region;
+      }
+      
+      announce(message, politeness = 'polite') {
+        const region = politeness === 'assertive' ? this.assertiveRegion : this.politeRegion;
+        if (!region) return;
+        
+        if (this.clearTimeoutId) {
+          clearTimeout(this.clearTimeoutId);
+          this.clearTimeoutId = null;
+        }
+        
+        region.textContent = '';
+        requestAnimationFrame(() => {
+          region.textContent = message;
+          this.clearTimeoutId = setTimeout(() => this.clear(), this.clearDelay);
+        });
+        
+        // Also update visible display for demo
+        const display = document.getElementById('live-display');
+        if (display) display.textContent = message;
+      }
+      
+      clear() {
+        if (this.clearTimeoutId) {
+          clearTimeout(this.clearTimeoutId);
+          this.clearTimeoutId = null;
+        }
+        if (this.politeRegion) this.politeRegion.textContent = '';
+        if (this.assertiveRegion) this.assertiveRegion.textContent = '';
+      }
+      
+      destroy() {
+        this.clear();
+        this.politeRegion?.remove();
+        this.assertiveRegion?.remove();
+      }
+    }
+    
+    // DOMMirror
+    class DOMMirror {
+      constructor(config = {}) {
+        this.container = config.container ?? document.body;
+        this.mirrors = new Map();
+        this.enabled = true;
+      }
+      
+      createMirror(surfaceId, config = {}) {
+        if (this.mirrors.has(surfaceId)) {
+          this.removeMirror(surfaceId);
+        }
+        
+        const element = document.createElement('div');
+        element.dataset.sceneMirror = surfaceId;
+        element.className = 'scene-mirror';
+        element.setAttribute('role', config.role ?? 'button');
+        if (config.label) element.setAttribute('aria-label', config.label);
+        element.tabIndex = config.tabIndex ?? 0;
+        
+        Object.assign(element.style, {
+          position: 'absolute',
+          background: 'transparent',
+          border: 'none',
+          padding: '0',
+          margin: '0',
+          cursor: 'pointer',
+          visibility: this.enabled ? 'visible' : 'hidden',
+          pointerEvents: this.enabled ? 'auto' : 'none',
+        });
+        
+        this.container.appendChild(element);
+        this.mirrors.set(surfaceId, { element, config });
+        return element;
+      }
+      
+      updatePosition(surfaceId, rect) {
+        const entry = this.mirrors.get(surfaceId);
+        if (!entry) return;
+        const { element } = entry;
+        element.style.left = `${rect.x}px`;
+        element.style.top = `${rect.y}px`;
+        element.style.width = `${rect.width}px`;
+        element.style.height = `${rect.height}px`;
+      }
+      
+      removeMirror(surfaceId) {
+        const entry = this.mirrors.get(surfaceId);
+        if (!entry) return;
+        entry.element.remove();
+        this.mirrors.delete(surfaceId);
+      }
+      
+      getMirror(surfaceId) {
+        return this.mirrors.get(surfaceId)?.element;
+      }
+      
+      getSurfaceIds() {
+        return Array.from(this.mirrors.keys());
+      }
+      
+      setEnabled(enabled) {
+        if (this.enabled === enabled) return;
+        this.enabled = enabled;
+        for (const entry of this.mirrors.values()) {
+          entry.element.style.visibility = enabled ? 'visible' : 'hidden';
+          entry.element.style.pointerEvents = enabled ? 'auto' : 'none';
+          entry.element.tabIndex = enabled ? (entry.config.tabIndex ?? 0) : -1;
+        }
+      }
+      
+      get isEnabled() { return this.enabled; }
+      
+      destroy() {
+        for (const surfaceId of this.mirrors.keys()) {
+          this.removeMirror(surfaceId);
+        }
+      }
+    }
+    
+    // FocusSync
+    class FocusSync {
+      constructor(mirror, config = {}) {
+        this.mirror = mirror;
+        this.wrapNavigation = config.wrapNavigation ?? true;
+        this.navigationAxis = config.navigationAxis ?? 'horizontal';
+        this.selectedId = null;
+        this.selectCallbacks = new Set();
+        this.activateCallbacks = new Set();
+        this.navigationOrder = [];
+        
+        this.setupEventListeners();
+      }
+      
+      setupEventListeners() {
+        this.keydownHandler = (e) => {
+          const target = e.target;
+          if (!target.dataset?.sceneMirror) return;
+          this.handleKeydown(e);
+        };
+        
+        this.focusHandler = (e) => {
+          const surfaceId = e.target.dataset?.sceneMirror;
+          if (surfaceId) this.setSelectedInternal(surfaceId, false);
+        };
+        
+        this.clickHandler = (e) => {
+          const surfaceId = e.target.dataset?.sceneMirror;
+          if (surfaceId) this.emitActivate(surfaceId);
+        };
+        
+        document.addEventListener('keydown', this.keydownHandler);
+        document.addEventListener('focusin', this.focusHandler);
+        document.addEventListener('click', this.clickHandler);
+      }
+      
+      handleKeydown(e) {
+        switch (e.key) {
+          case 'ArrowLeft':
+            if (this.navigationAxis === 'horizontal' || this.navigationAxis === 'both') {
+              e.preventDefault();
+              this.selectPrevious();
+            }
+            break;
+          case 'ArrowRight':
+            if (this.navigationAxis === 'horizontal' || this.navigationAxis === 'both') {
+              e.preventDefault();
+              this.selectNext();
+            }
+            break;
+          case 'ArrowUp':
+            if (this.navigationAxis === 'vertical' || this.navigationAxis === 'both') {
+              e.preventDefault();
+              this.selectPrevious();
+            }
+            break;
+          case 'ArrowDown':
+            if (this.navigationAxis === 'vertical' || this.navigationAxis === 'both') {
+              e.preventDefault();
+              this.selectNext();
+            }
+            break;
+          case 'Enter':
+          case ' ':
+            e.preventDefault();
+            this.activate();
+            break;
+          case 'Home':
+            e.preventDefault();
+            this.selectFirst();
+            break;
+          case 'End':
+            e.preventDefault();
+            this.selectLast();
+            break;
+        }
+      }
+      
+      setNavigationOrder(surfaceIds) {
+        this.navigationOrder = [...surfaceIds];
+      }
+      
+      getNavigationOrder() {
+        return this.navigationOrder.length > 0 
+          ? [...this.navigationOrder]
+          : this.mirror.getSurfaceIds();
+      }
+      
+      select(surfaceId) {
+        this.setSelectedInternal(surfaceId, true);
+      }
+      
+      setSelectedInternal(surfaceId, moveFocus) {
+        if (surfaceId === this.selectedId) return;
+        this.selectedId = surfaceId;
+        
+        if (moveFocus && surfaceId) {
+          const element = this.mirror.getMirror(surfaceId);
+          if (element && document.activeElement !== element) {
+            element.focus();
+          }
+        }
+        
+        this.emitSelect(surfaceId);
+      }
+      
+      getSelected() { return this.selectedId; }
+      
+      selectNext() {
+        const order = this.getNavigationOrder();
+        if (order.length === 0) return;
+        const currentIndex = this.selectedId ? order.indexOf(this.selectedId) : -1;
+        let nextIndex = currentIndex + 1;
+        if (nextIndex >= order.length) {
+          nextIndex = this.wrapNavigation ? 0 : order.length - 1;
+        }
+        this.select(order[nextIndex]);
+      }
+      
+      selectPrevious() {
+        const order = this.getNavigationOrder();
+        if (order.length === 0) return;
+        const currentIndex = this.selectedId ? order.indexOf(this.selectedId) : order.length;
+        let prevIndex = currentIndex - 1;
+        if (prevIndex < 0) {
+          prevIndex = this.wrapNavigation ? order.length - 1 : 0;
+        }
+        this.select(order[prevIndex]);
+      }
+      
+      selectFirst() {
+        const order = this.getNavigationOrder();
+        if (order.length > 0) this.select(order[0]);
+      }
+      
+      selectLast() {
+        const order = this.getNavigationOrder();
+        if (order.length > 0) this.select(order[order.length - 1]);
+      }
+      
+      activate() {
+        if (this.selectedId) this.emitActivate(this.selectedId);
+      }
+      
+      onSelect(callback) {
+        this.selectCallbacks.add(callback);
+        return () => this.selectCallbacks.delete(callback);
+      }
+      
+      onActivate(callback) {
+        this.activateCallbacks.add(callback);
+        return () => this.activateCallbacks.delete(callback);
+      }
+      
+      emitSelect(surfaceId) {
+        for (const cb of this.selectCallbacks) {
+          try { cb(surfaceId); } catch (e) { console.error(e); }
+        }
+      }
+      
+      emitActivate(surfaceId) {
+        for (const cb of this.activateCallbacks) {
+          try { cb(surfaceId); } catch (e) { console.error(e); }
+        }
+      }
+      
+      destroy() {
+        document.removeEventListener('keydown', this.keydownHandler);
+        document.removeEventListener('focusin', this.focusHandler);
+        document.removeEventListener('click', this.clickHandler);
+        this.selectCallbacks.clear();
+        this.activateCallbacks.clear();
+      }
+    }
+    
+    // ============================================
+    // Demo Application
+    // ============================================
+    
+    const wrapper = document.getElementById('canvas-wrapper');
+    const mirrorContainer = document.getElementById('mirror-container');
+    const logEl = document.getElementById('log');
+    
+    // UI Elements
+    const currentModeEl = document.getElementById('current-mode');
+    const mirrorsEnabledEl = document.getElementById('mirrors-enabled');
+    const selectedSurfaceEl = document.getElementById('selected-surface');
+    const reducedMotionEl = document.getElementById('reduced-motion');
+    
+    // Surface data
+    const surfaces = [
+      { id: 'card-1', label: 'Product Card 1', element: document.getElementById('surface-card-1') },
+      { id: 'card-2', label: 'Product Card 2', element: document.getElementById('surface-card-2') },
+      { id: 'card-3', label: 'Product Card 3', element: document.getElementById('surface-card-3') },
+      { id: 'card-4', label: 'Product Card 4', element: document.getElementById('surface-card-4') },
+      { id: 'card-5', label: 'Product Card 5', element: document.getElementById('surface-card-5') },
+    ];
+    
+    // Initialize components
+    const announcer = new LiveAnnouncer({ container: document.body });
+    const mirror = new DOMMirror({ container: mirrorContainer });
+    const focusSync = new FocusSync(mirror, { navigationAxis: 'horizontal' });
+    
+    // Create mirrors for each surface
+    surfaces.forEach((surface, index) => {
+      mirror.createMirror(surface.id, {
+        role: 'button',
+        label: surface.label,
+        tabIndex: 0,
+      });
+      
+      // Get rect relative to wrapper
+      const rect = surface.element.getBoundingClientRect();
+      const wrapperRect = wrapper.getBoundingClientRect();
+      mirror.updatePosition(surface.id, {
+        x: rect.left - wrapperRect.left,
+        y: rect.top - wrapperRect.top,
+        width: rect.width,
+        height: rect.height,
+      });
+    });
+    
+    // Set navigation order
+    focusSync.setNavigationOrder(surfaces.map(s => s.id));
+    
+    // Track selection
+    let selectedId = null;
+    
+    focusSync.onSelect((surfaceId) => {
+      // Update visual selection
+      surfaces.forEach(s => s.element.classList.remove('selected'));
+      if (surfaceId) {
+        const surface = surfaces.find(s => s.id === surfaceId);
+        if (surface) {
+          surface.element.classList.add('selected');
+          
+          // Calculate position for announcement
+          const index = surfaces.findIndex(s => s.id === surfaceId);
+          const total = surfaces.length;
+          announcer.announce(`${surface.label}, ${index + 1} of ${total}`);
+          log('announce', `${surface.label}, ${index + 1} of ${total}`);
+        }
+      }
+      
+      selectedId = surfaceId;
+      selectedSurfaceEl.textContent = surfaceId ?? 'None';
+      log('select', `Selected: ${surfaceId ?? 'None'}`);
+    });
+    
+    focusSync.onActivate((surfaceId) => {
+      const surface = surfaces.find(s => s.id === surfaceId);
+      if (surface) {
+        announcer.announce(`Activated ${surface.label}`, 'assertive');
+        log('activate', `Activated: ${surface.label}`);
+        log('announce', `Activated ${surface.label}`);
+      }
+    });
+    
+    // Check reduced motion preference
+    const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    reducedMotionEl.textContent = reducedMotionQuery.matches ? 'Yes' : 'No';
+    reducedMotionQuery.addEventListener('change', (e) => {
+      reducedMotionEl.textContent = e.matches ? 'Yes' : 'No';
+    });
+    
+    // Mode switching
+    let isCanvasMode = true;
+    
+    document.getElementById('btn-mode-canvas').addEventListener('click', () => {
+      if (isCanvasMode) return;
+      isCanvasMode = true;
+      mirror.setEnabled(true);
+      
+      document.getElementById('btn-mode-canvas').classList.add('active');
+      document.getElementById('btn-mode-dom').classList.remove('active');
+      currentModeEl.textContent = 'Canvas-Interactive';
+      mirrorsEnabledEl.textContent = 'Yes';
+      
+      log('mode', 'Switched to Canvas-Interactive mode');
+      announcer.announce('Canvas mode active. Use arrow keys to navigate.');
+    });
+    
+    document.getElementById('btn-mode-dom').addEventListener('click', () => {
+      if (!isCanvasMode) return;
+      isCanvasMode = false;
+      mirror.setEnabled(false);
+      
+      document.getElementById('btn-mode-dom').classList.add('active');
+      document.getElementById('btn-mode-canvas').classList.remove('active');
+      currentModeEl.textContent = 'DOM-Interactive';
+      mirrorsEnabledEl.textContent = 'No';
+      
+      log('mode', 'Switched to DOM-Interactive mode');
+      announcer.announce('DOM mode active.');
+    });
+    
+    // Log function
+    function log(type, message) {
+      const entry = document.createElement('div');
+      entry.className = `log-entry ${type}`;
+      entry.textContent = `[${type}] ${message}`;
+      logEl.appendChild(entry);
+      logEl.scrollTop = logEl.scrollHeight;
+      
+      while (logEl.children.length > 50) {
+        logEl.removeChild(logEl.firstChild);
+      }
+    }
+    
+    // Controls
+    document.getElementById('btn-clear-log').addEventListener('click', () => {
+      logEl.innerHTML = '';
+    });
+    
+    // Initial log
+    log('mode', 'Demo initialized in Canvas-Interactive mode');
+    log('announce', 'Use Tab or arrow keys to navigate between cards');
+    
+    // Announce initial state
+    announcer.announce('Accessibility demo loaded. Use Tab to focus cards, arrow keys to navigate.');
+  </script>
+</body>
+</html>
