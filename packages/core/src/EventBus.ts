@@ -30,6 +30,10 @@ export interface EventMap {
   'pointer:move': { x: number; y: number; surfaceId?: string };
   'pointer:up': { x: number; y: number; surfaceId?: string };
   'pointer:cancel': { x: number; y: number; surfaceId?: string };
+
+  // Accessibility events
+  'a11y:select': { surfaceId: string | null };
+  'a11y:activate': { surfaceId: string };
 }
 
 interface EventListener {
