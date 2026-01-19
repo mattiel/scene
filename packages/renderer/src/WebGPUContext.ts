@@ -3,9 +3,49 @@
  * 
  * Manages WebGPU adapter, device, and context initialization.
  * Provides availability detection and graceful degradation.
+ * 
+ * Browser Compatibility:
+ * - Chrome/Edge 113+: Full support
+ * - Firefox 121+: Full support (behind flag in earlier versions)
+ * - Safari 17+: Full support (iOS 17.4+ enabled by default, 17.0-17.3 behind flag)
+ * - iOS Safari: Requires iOS 17+ (iOS 16 and earlier not supported)
  */
 
 /// <reference types="@webgpu/types" />
+
+/**
+ * Browser detection information
+ */
+export interface BrowserInfo {
+  /** Whether the browser is Safari (desktop or iOS) */
+  isSafari: boolean;
+  /** Whether running on iOS (iPhone/iPad) */
+  isIOS: boolean;
+  /** Whether running on iPadOS */
+  isIPadOS: boolean;
+  /** Whether this is iOS Safari specifically */
+  isIOSSafari: boolean;
+  /** Whether this is a mobile device */
+  isMobile: boolean;
+  /** Detected iOS version (major.minor) or null */
+  iosVersion: { major: number; minor: number } | null;
+}
+
+/**
+ * WebGPU capability information
+ */
+export interface WebGPUCapabilities {
+  /** Maximum texture dimension (2D) */
+  maxTextureDimension2D: number;
+  /** Maximum buffer size */
+  maxBufferSize: number;
+  /** Maximum uniform buffer binding size */
+  maxUniformBufferBindingSize: number;
+  /** Preferred canvas format */
+  preferredFormat: GPUTextureFormat | null;
+  /** Available features */
+  features: string[];
+}
 
 export interface WebGPUContextOptions {
   canvas: HTMLCanvasElement;
@@ -24,6 +64,8 @@ export interface WebGPUContextState {
 
 export class WebGPUContext {
   private state: WebGPUContextState;
+  private _browserInfo: BrowserInfo | null = null;
+  private _capabilities: WebGPUCapabilities | null = null;
 
   constructor() {
     this.state = {
@@ -34,6 +76,112 @@ export class WebGPUContext {
       format: null,
       canvas: null as unknown as HTMLCanvasElement
     };
+  }
+
+  /**
+   * Detect browser and platform information
+   * Useful for Safari/iOS-specific handling
+   */
+  static detectBrowser(): BrowserInfo {
+    const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+    
+    // iOS detection (iPhone/iPod)
+    const isIPhone = /iPhone|iPod/.test(ua);
+    
+    // iPad detection (including iPadOS 13+ which reports as Mac)
+    const isIPad = /iPad/.test(ua) || 
+      (typeof navigator !== 'undefined' && 
+       navigator.platform === 'MacIntel' && 
+       navigator.maxTouchPoints > 1);
+    
+    const isIOS = isIPhone || isIPad;
+    
+    // Safari detection (not Chrome/Firefox pretending to be Safari)
+    const isSafari = /^((?!chrome|android|crios|fxios).)*safari/i.test(ua);
+    
+    // Mobile detection
+    const isMobile = /Mobi|Android|iPhone|iPad|iPod/.test(ua) || isIPad;
+    
+    // iOS version extraction
+    let iosVersion: { major: number; minor: number } | null = null;
+    if (isIOS) {
+      // Try to extract from "OS X_Y" pattern
+      const match = ua.match(/OS (\d+)[_.](\d+)/);
+      if (match) {
+        iosVersion = {
+          major: parseInt(match[1], 10),
+          minor: parseInt(match[2], 10)
+        };
+      }
+    }
+    
+    return {
+      isSafari,
+      isIOS,
+      isIPadOS: isIPad,
+      isIOSSafari: isIOS && isSafari,
+      isMobile,
+      iosVersion
+    };
+  }
+
+  /**
+   * Get cached browser information
+   */
+  get browserInfo(): BrowserInfo {
+    if (!this._browserInfo) {
+      this._browserInfo = WebGPUContext.detectBrowser();
+    }
+    return this._browserInfo;
+  }
+
+  /**
+   * Check if WebGPU is expected to be supported based on browser version
+   * Note: This is a heuristic - actual support depends on runtime checks
+   */
+  static checkExpectedSupport(): { supported: boolean; reason: string } {
+    const browser = WebGPUContext.detectBrowser();
+    
+    if (browser.isIOSSafari) {
+      if (browser.iosVersion) {
+        if (browser.iosVersion.major < 17) {
+          return {
+            supported: false,
+            reason: `iOS ${browser.iosVersion.major}.${browser.iosVersion.minor} does not support WebGPU. iOS 17+ required.`
+          };
+        }
+        if (browser.iosVersion.major === 17 && browser.iosVersion.minor < 4) {
+          return {
+            supported: true,
+            reason: `iOS ${browser.iosVersion.major}.${browser.iosVersion.minor} supports WebGPU but may require enabling it in Settings > Safari > Advanced > Feature Flags > WebGPU`
+          };
+        }
+      }
+      return {
+        supported: true,
+        reason: 'iOS Safari 17.4+ has WebGPU enabled by default'
+      };
+    }
+    
+    if (browser.isSafari) {
+      return {
+        supported: true,
+        reason: 'Safari 17+ supports WebGPU'
+      };
+    }
+    
+    // For other browsers, assume support and let runtime check handle it
+    return {
+      supported: true,
+      reason: 'Modern browsers (Chrome 113+, Firefox 121+, Edge 113+) support WebGPU'
+    };
+  }
+
+  /**
+   * Get WebGPU capabilities (after initialization)
+   */
+  get capabilities(): WebGPUCapabilities | null {
+    return this._capabilities;
   }
 
   /**
@@ -63,7 +211,14 @@ export class WebGPUContext {
    */
   static async checkAvailability(): Promise<boolean> {
     if (!navigator.gpu) {
-      console.warn('WebGPU is not supported in this browser');
+      // Provide helpful message for iOS Safari users
+      const browser = WebGPUContext.detectBrowser();
+      if (browser.isIOSSafari) {
+        const support = WebGPUContext.checkExpectedSupport();
+        console.warn(`WebGPU not available: ${support.reason}`);
+      } else {
+        console.warn('WebGPU is not supported in this browser');
+      }
       return false;
     }
 
@@ -78,6 +233,27 @@ export class WebGPUContext {
       console.warn('WebGPU availability check failed:', error);
       return false;
     }
+  }
+
+  /**
+   * Populate WebGPU capabilities from adapter/device
+   */
+  private populateCapabilities(adapter: GPUAdapter, device: GPUDevice): void {
+    const limits = device.limits;
+    const features: string[] = [];
+    
+    // Collect supported features
+    adapter.features.forEach((feature: string) => {
+      features.push(feature);
+    });
+    
+    this._capabilities = {
+      maxTextureDimension2D: limits.maxTextureDimension2D,
+      maxBufferSize: limits.maxBufferSize,
+      maxUniformBufferBindingSize: limits.maxUniformBufferBindingSize,
+      preferredFormat: navigator.gpu?.getPreferredCanvasFormat() ?? null,
+      features
+    };
   }
 
   /**
@@ -100,16 +276,29 @@ export class WebGPUContext {
 
     // Check if WebGPU is available
     if (!navigator.gpu) {
-      console.warn('WebGPU is not supported - Scene will run in degraded mode');
+      const support = WebGPUContext.checkExpectedSupport();
+      console.warn(`WebGPU is not supported - Scene will run in degraded mode. ${support.reason}`);
       this.state.isAvailable = false;
       this.state.canvas = options.canvas;
       return false;
     }
 
     try {
-      // Request adapter
+      // Log browser info for debugging
+      const browser = this.browserInfo;
+      if (browser.isIOSSafari) {
+        console.info(`Scene: Detected iOS Safari${browser.iosVersion ? ` ${browser.iosVersion.major}.${browser.iosVersion.minor}` : ''}`);
+      } else if (browser.isSafari) {
+        console.info('Scene: Detected Safari');
+      }
+
+      // Request adapter with appropriate power preference
+      // On mobile Safari, prefer low-power to conserve battery unless explicitly requested
+      const powerPref = options.powerPreference || 
+        (browser.isMobile ? 'low-power' : 'high-performance');
+      
       const adapter: GPUAdapter | null = await navigator.gpu.requestAdapter({
-        powerPreference: options.powerPreference || 'high-performance'
+        powerPreference: powerPref
       });
 
       if (!adapter) {
@@ -172,7 +361,15 @@ export class WebGPUContext {
         canvas: options.canvas
       };
 
-      console.log('WebGPU initialized successfully');
+      // Populate capabilities for feature detection
+      this.populateCapabilities(adapter, device);
+
+      // Log initialization with format info (helpful for Safari debugging)
+      if (browser.isSafari || browser.isIOSSafari) {
+        console.log(`WebGPU initialized successfully (format: ${format}, Safari mode)`);
+      } else {
+        console.log('WebGPU initialized successfully');
+      }
       return true;
 
     } catch (error: unknown) {

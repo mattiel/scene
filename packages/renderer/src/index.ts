@@ -6,7 +6,12 @@
  */
 
 export { WebGPUContext } from './WebGPUContext';
-export type { WebGPUContextOptions, WebGPUContextState } from './WebGPUContext';
+export type { 
+  WebGPUContextOptions, 
+  WebGPUContextState,
+  BrowserInfo,
+  WebGPUCapabilities 
+} from './WebGPUContext';
 
 export { QuadRenderer } from './QuadRenderer';
 export type { QuadVertex, QuadInstance, QuadRenderOptions } from './QuadRenderer';
