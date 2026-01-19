@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Scene 3D Carousel Demo</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <canvas id="scene-canvas" aria-hidden="true"></canvas>
+    <div id="mirror-root"></div>
+
+    <main id="app">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Phase 8 Demo</p>
+          <h1>Scene 3D Carousel</h1>
+          <p class="subtitle">
+            Drag or scroll to browse. Click a card to expand.
+            Press Escape or scroll to collapse.
+          </p>
+        </div>
+        <div class="status" id="status">Initializing...</div>
+      </header>
+
+      <section id="carousel" class="view" aria-hidden="false">
+        <div class="carousel-stage">
+          <div id="carousel-track" class="carousel-track" aria-hidden="true"></div>
+        </div>
+        <div class="center-info">
+          <span class="label">Centered</span>
+          <span id="center-title" class="value">--</span>
+        </div>
+      </section>
+
+    </main>
+
+    <div class="hint">Click a card to expand. Press Escape or scroll to collapse.</div>
+    <div id="transition-fallback" class="transition-fallback" aria-hidden="true"></div>
+
+    <script type="importmap">
+      {
+        "imports": {
+          "@scene/core": "/packages/core/dist/index.js",
+          "@scene/surfaces": "/packages/surfaces/dist/index.js",
+          "@scene/input": "/packages/input/dist/index.js",
+          "@scene/a11y": "/packages/a11y/dist/index.js",
+          "@scene/navigation": "/packages/navigation/dist/index.js",
+          "@scene/renderer": "/packages/renderer/dist/index.js?v=dramatic-curl",
+          "@scene/screen": "/packages/screen/dist/index.js"
+        }
+      }
+    </script>
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>

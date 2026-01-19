@@ -16,3 +16,6 @@ export type { ScreenPassOptions, ScreenPassEffect } from './ScreenPass';
 
 export { ShaderLibrary } from './ShaderLibrary';
 export type { ShaderModule, CompiledShader } from './ShaderLibrary';
+
+export { CarouselRenderer } from './CarouselRenderer';
+export type { CarouselCardTexture, CarouselCardState, CarouselRendererOptions } from './CarouselRenderer';
