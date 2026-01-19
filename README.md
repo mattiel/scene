@@ -116,6 +116,71 @@ See [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md) for detailed roadmap.
 - Node.js >= 18.0.0
 - pnpm >= 8.0.0
 
+## Browser Compatibility
+
+Scene uses WebGPU for GPU-accelerated rendering. When WebGPU is not available, Scene gracefully degrades to DOM-only mode.
+
+### WebGPU Support
+
+| Browser | Version | Status |
+|---------|---------|--------|
+| Chrome | 113+ | ✅ Full support |
+| Edge | 113+ | ✅ Full support |
+| Firefox | 121+ | ✅ Full support |
+| Safari (macOS) | 17+ | ✅ Full support |
+| Safari (iOS) | 17.4+ | ✅ Full support (enabled by default) |
+| Safari (iOS) | 17.0-17.3 | ⚠️ Requires enabling in Settings |
+| Safari (iOS) | 16 and earlier | ❌ Not supported |
+
+### iOS Safari Notes
+
+- **iOS 17.4+**: WebGPU is enabled by default
+- **iOS 17.0-17.3**: WebGPU available but requires manual enable:
+  1. Open **Settings** > **Safari** > **Advanced** > **Feature Flags**
+  2. Enable **WebGPU**
+- **iOS 16 and earlier**: WebGPU not available; Scene will run in degraded mode (DOM-only)
+
+### Graceful Degradation
+
+When WebGPU is not available, Scene automatically degrades:
+
+```typescript
+import { WebGPUContext } from '@scene/renderer';
+
+const context = new WebGPUContext();
+const initialized = await context.initialize({ canvas });
+
+if (!context.isAvailable) {
+  // Scene continues to work with:
+  // - DOM tracking and layout observation
+  // - Motion callbacks still fire
+  // - No GPU rendering (visual effects disabled)
+  console.log('Running in degraded mode');
+}
+
+// Check browser info for debugging
+const browser = WebGPUContext.detectBrowser();
+if (browser.isIOSSafari) {
+  console.log(`iOS Safari ${browser.iosVersion?.major}.${browser.iosVersion?.minor}`);
+}
+```
+
+### Feature Detection
+
+```typescript
+// Check expected support before initialization
+const support = WebGPUContext.checkExpectedSupport();
+if (!support.supported) {
+  console.warn(support.reason);
+}
+
+// After initialization, check capabilities
+if (context.capabilities) {
+  console.log('Max texture size:', context.capabilities.maxTextureDimension2D);
+  console.log('Canvas format:', context.capabilities.preferredFormat);
+}
+```
+
 ## License
 
 MIT © Mattie Lee

@@ -8,6 +8,18 @@ WebGPU rendering foundation for Scene engine.
 - **QuadRenderer**: Efficient rendering of textured quads for DOM surfaces
 - **ScreenPass**: Fullscreen post-processing pipeline for screen effects
 - **ShaderLibrary**: WGSL shader management with built-in effects
+- **Browser Detection**: Safari/iOS detection utilities for platform-specific handling
+
+## Browser Compatibility
+
+| Browser | Version | Status |
+|---------|---------|--------|
+| Chrome/Edge | 113+ | ✅ Full support |
+| Firefox | 121+ | ✅ Full support |
+| Safari (macOS) | 17+ | ✅ Full support |
+| iOS Safari | 17.4+ | ✅ Full support |
+| iOS Safari | 17.0-17.3 | ⚠️ Requires feature flag |
+| iOS Safari | 16- | ❌ Not supported |
 
 ## Graceful Degradation
 
@@ -130,6 +142,48 @@ ScreenPass
 ├─ Fullscreen post-processing
 ├─ Effect stacking
 └─ Intermediate textures
+```
+
+## Browser Detection
+
+The renderer provides utilities for detecting Safari/iOS for platform-specific handling:
+
+```typescript
+import { WebGPUContext } from '@scene/renderer';
+
+// Static method - can be called without initialization
+const browser = WebGPUContext.detectBrowser();
+
+console.log(browser.isSafari);     // true for Safari
+console.log(browser.isIOS);        // true for iPhone/iPad
+console.log(browser.isIOSSafari);  // true for Safari on iOS
+console.log(browser.isMobile);     // true for mobile devices
+console.log(browser.iosVersion);   // { major: 17, minor: 4 } or null
+
+// Check expected WebGPU support
+const support = WebGPUContext.checkExpectedSupport();
+if (!support.supported) {
+  console.warn(support.reason);
+  // e.g., "iOS 16.5 does not support WebGPU. iOS 17+ required."
+}
+```
+
+## Capabilities Detection
+
+After initialization, you can query WebGPU capabilities:
+
+```typescript
+const context = new WebGPUContext();
+await context.initialize({ canvas });
+
+if (context.capabilities) {
+  // Useful for debugging Safari-specific behavior
+  console.log('Preferred format:', context.capabilities.preferredFormat);
+  // Safari: 'bgra8unorm', Chrome: 'rgba8unorm'
+  
+  console.log('Max texture size:', context.capabilities.maxTextureDimension2D);
+  console.log('Features:', context.capabilities.features);
+}
 ```
 
 ## Device Lost Handling
