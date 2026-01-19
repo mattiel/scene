@@ -149,8 +149,9 @@ export class PointerManager {
   attach(): void {
     if (this.attached) return;
     
-    this.target.addEventListener('pointerdown', this.handlePointerDown);
-    this.target.addEventListener('pointermove', this.handlePointerMove);
+    // Use passive: false to allow preventDefault() for touch events
+    this.target.addEventListener('pointerdown', this.handlePointerDown, { passive: false });
+    this.target.addEventListener('pointermove', this.handlePointerMove, { passive: false });
     this.target.addEventListener('pointerup', this.handlePointerUp);
     this.target.addEventListener('pointercancel', this.handlePointerCancel);
     this.target.addEventListener('pointerleave', this.handlePointerLeave);
@@ -259,6 +260,9 @@ export class PointerManager {
    * Handle pointer down event
    */
   private onPointerDown(e: PointerEvent): void {
+    // Prevent default to stop touch scrolling and other browser behaviors
+    e.preventDefault();
+    
     const pointer = this.normalizePointer(e);
     
     // Store pointer
@@ -287,6 +291,11 @@ export class PointerManager {
    * Handle pointer move event
    */
   private onPointerMove(e: PointerEvent): void {
+    // Prevent default for touch to stop scrolling during drag
+    if (this.pointers.has(e.pointerId)) {
+      e.preventDefault();
+    }
+    
     const pointer = this.normalizePointer(e);
     const isTracked = this.pointers.has(e.pointerId);
     

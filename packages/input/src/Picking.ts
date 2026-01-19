@@ -197,7 +197,8 @@ export class Picking {
    * Handle pointer move (for hover tracking and onPick)
    */
   handlePointerMove(pointer: NormalizedPointer): PickEvent {
-    const hits = this.pick(pointer.x, pointer.y);
+    // Use clientX/clientY (viewport coords) to match surface rects from getBoundingClientRect
+    const hits = this.pick(pointer.clientX, pointer.clientY);
     const event: PickEvent = {
       hits,
       topHit: hits.length > 0 ? hits[0] : null,
@@ -236,7 +237,8 @@ export class Picking {
    * Handle pointer down
    */
   handlePointerDown(pointer: NormalizedPointer): PickEvent {
-    const hits = this.pick(pointer.x, pointer.y);
+    // Use clientX/clientY (viewport coords) to match surface rects from getBoundingClientRect
+    const hits = this.pick(pointer.clientX, pointer.clientY);
     const event: PickEvent = {
       hits,
       topHit: hits.length > 0 ? hits[0] : null,
@@ -252,7 +254,8 @@ export class Picking {
    * Handle pointer up
    */
   handlePointerUp(pointer: NormalizedPointer): PickEvent {
-    const hits = this.pick(pointer.x, pointer.y);
+    // Use clientX/clientY (viewport coords) to match surface rects from getBoundingClientRect
+    const hits = this.pick(pointer.clientX, pointer.clientY);
     const event: PickEvent = {
       hits,
       topHit: hits.length > 0 ? hits[0] : null,
