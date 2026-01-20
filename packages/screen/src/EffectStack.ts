@@ -123,6 +123,15 @@ export class EffectStack {
       return null;
     }
 
+    // Guard against duplicate effect types
+    const existingId = this.order.find(
+      (id) => this.effects.get(id)?.type === config.type
+    );
+    if (existingId) {
+      console.warn(`EffectStack: Effect type '${config.type}' already exists`);
+      return this.effects.get(existingId) ?? null;
+    }
+
     const id: string = `${config.type}_${++this.effectIdCounter}`;
     const effect: Effect = factory(id, this.screenPass, config.params);
     effect.enabled = config.enabled ?? true;
