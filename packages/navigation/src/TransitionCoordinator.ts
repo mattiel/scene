@@ -58,6 +58,7 @@ export class TransitionCoordinator {
   private active: ActiveTransition | null = null;
   private ghostCounter = 0;
   private transitionCounter = 0; // Unique ID generator for transitions
+  private destroyed = false;
 
   constructor(engine: Engine, options: TransitionOptions) {
     this.engine = engine;
@@ -77,6 +78,15 @@ export class TransitionCoordinator {
     request: TransitionRequest,
     callbacks: TransitionCallbacks
   ): Promise<TransitionResult> {
+    if (this.destroyed) {
+      return {
+        status: 'failed',
+        from: request.from,
+        to: request.to,
+        error: new Error('Coordinator destroyed'),
+      };
+    }
+
     if (this.active) {
       return {
         status: 'failed',
@@ -317,6 +327,8 @@ export class TransitionCoordinator {
    * Destroy the coordinator and cancel any active transition.
    */
   destroy(): void {
+    this.destroyed = true;
+
     if (this.active) {
       this.cancel('manual');
       this.cleanup();

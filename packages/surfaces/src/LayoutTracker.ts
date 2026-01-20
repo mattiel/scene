@@ -78,9 +78,9 @@ export class LayoutTracker {
    * Start tracking all surfaces in the registry
    */
   start(): void {
-    // Prevent duplicate observers if already tracking
+    // Clean restart instead of early return - allows re-initialization
     if (this._resizeObserver) {
-      return;
+      this.stop();
     }
 
     // Create ResizeObserver
