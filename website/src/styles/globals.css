@@ -1,0 +1,44 @@
+@import "tailwindcss";
+@config "../../tailwind.config.ts";
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 0%;
+    --primary: 0 0% 0%;
+    --primary-foreground: 0 0% 100%;
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 45%;
+  }
+
+  .dark {
+    --background: 0 0% 0%;
+    --foreground: 0 0% 100%;
+    --primary: 0 0% 100%;
+    --primary-foreground: 0 0% 0%;
+    --muted: 0 0% 15%;
+    --muted-foreground: 0 0% 64%;
+  }
+
+  * {
+    @apply border-transparent;
+  }
+
+  html,
+  body {
+    @apply h-full;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+
+  .scene-mirror {
+    outline: 2px solid transparent;
+    outline-offset: 2px;
+  }
+
+  .scene-mirror:focus-visible {
+    outline-color: hsl(var(--foreground));
+  }
+}

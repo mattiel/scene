@@ -275,41 +275,45 @@ export class WebGPUContext {
     }
 
     // Check if WebGPU is available
+    const browser = this.browserInfo;
+    
+    // Enhanced diagnostics for debugging
+    console.info(`[WebGPU] Browser: ${browser.isIOSSafari ? 'iOS Safari' : browser.isSafari ? 'Safari' : 'Other'}${browser.iosVersion ? ` (iOS ${browser.iosVersion.major}.${browser.iosVersion.minor})` : ''}`);
+    console.info(`[WebGPU] Secure context (HTTPS): ${window.isSecureContext}`);
+    console.info(`[WebGPU] navigator.gpu exists: ${!!navigator.gpu}`);
+    
     if (!navigator.gpu) {
       const support = WebGPUContext.checkExpectedSupport();
-      console.warn(`WebGPU is not supported - Scene will run in degraded mode. ${support.reason}`);
+      console.warn(`[WebGPU] Not available: ${support.reason}`);
       this.state.isAvailable = false;
       this.state.canvas = options.canvas;
       return false;
     }
 
     try {
-      // Log browser info for debugging
-      const browser = this.browserInfo;
-      if (browser.isIOSSafari) {
-        console.info(`Scene: Detected iOS Safari${browser.iosVersion ? ` ${browser.iosVersion.major}.${browser.iosVersion.minor}` : ''}`);
-      } else if (browser.isSafari) {
-        console.info('Scene: Detected Safari');
-      }
-
       // Request adapter with appropriate power preference
       // On mobile Safari, prefer low-power to conserve battery unless explicitly requested
       const powerPref = options.powerPreference || 
         (browser.isMobile ? 'low-power' : 'high-performance');
       
+      console.info(`[WebGPU] Requesting adapter (powerPreference: ${powerPref})...`);
       const adapter: GPUAdapter | null = await navigator.gpu.requestAdapter({
         powerPreference: powerPref
       });
 
       if (!adapter) {
-        console.warn('Failed to get WebGPU adapter - Scene will run in degraded mode');
+        console.warn('[WebGPU] requestAdapter() returned null - no suitable GPU found');
         this.state.isAvailable = false;
         this.state.canvas = options.canvas;
         return false;
       }
+      
+      console.info(`[WebGPU] Adapter acquired, features: ${[...adapter.features].join(', ') || 'none'}`);
+      console.info(`[WebGPU] Requesting device...`);
 
       // Request device
       const device: GPUDevice = await adapter.requestDevice();
+      console.info('[WebGPU] Device acquired');
 
       // Handle device lost
       device.lost.then((info: GPUDeviceLostInfo) => {
@@ -323,9 +327,10 @@ export class WebGPUContext {
       });
 
       // Get canvas context
+      console.info('[WebGPU] Getting canvas context...');
       const context: GPUCanvasContext | null = options.canvas.getContext('webgpu');
       if (!context) {
-        console.warn('Failed to get WebGPU canvas context');
+        console.warn('[WebGPU] canvas.getContext("webgpu") returned null');
         device.destroy(); // Clean up device before returning
         this.state.isAvailable = false;
         this.state.canvas = options.canvas;
@@ -336,6 +341,7 @@ export class WebGPUContext {
       const format: GPUTextureFormat = navigator.gpu.getPreferredCanvasFormat();
 
       // Configure context
+      console.info(`[WebGPU] Configuring context (format: ${format})...`);
       try {
         context.configure({
           device,
@@ -344,7 +350,7 @@ export class WebGPUContext {
           usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC
         });
       } catch (configError: unknown) {
-        console.error('Failed to configure WebGPU context:', configError);
+        console.error('[WebGPU] context.configure() failed:', configError);
         device.destroy(); // Clean up device before returning
         this.state.isAvailable = false;
         this.state.canvas = options.canvas;
@@ -364,16 +370,11 @@ export class WebGPUContext {
       // Populate capabilities for feature detection
       this.populateCapabilities(adapter, device);
 
-      // Log initialization with format info (helpful for Safari debugging)
-      if (browser.isSafari || browser.isIOSSafari) {
-        console.log(`WebGPU initialized successfully (format: ${format}, Safari mode)`);
-      } else {
-        console.log('WebGPU initialized successfully');
-      }
+      console.info(`[WebGPU] Initialized successfully`);
       return true;
 
     } catch (error: unknown) {
-      console.error('WebGPU initialization failed:', error);
+      console.error('[WebGPU] Initialization failed:', error);
       this.state.isAvailable = false;
       this.state.canvas = options.canvas;
       return false;

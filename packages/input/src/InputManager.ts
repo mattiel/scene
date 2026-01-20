@@ -349,13 +349,14 @@ export class InputManager {
   /**
    * Handle drag start
    */
-  private onDragStart(gesture: GestureState, _pointer: NormalizedPointer): void {
+  private onDragStart(gesture: GestureState, pointer: NormalizedPointer): void {
     // Track starting surface
     this.dragStartSurfaceId = null;
     this.dragActive = true;
     
     if (this.isCanvasMode && this.config.enablePicking) {
-      const pickResult = this.picking.pickTop(gesture.startX, gesture.startY);
+      // Use clientX/clientY (viewport coords) to match surface rects from getBoundingClientRect
+      const pickResult = this.picking.pickTop(pointer.clientX, pointer.clientY);
       this.dragStartSurfaceId = pickResult?.surface.id ?? null;
     }
     
@@ -369,6 +370,23 @@ export class InputManager {
       x: gesture.startX,
       y: gesture.startY,
     });
+    
+    // Emit initial drag with accumulated delta from threshold detection
+    // This ensures the movement that triggered drag isn't lost
+    if (gesture.totalDeltaX !== 0 || gesture.totalDeltaY !== 0) {
+      // Add initial sample for inertia tracking
+      if (this.config.enableInertia) {
+        this.inertia.addSample(pointer.x, pointer.y);
+      }
+      
+      this.emitIntent('drag', {
+        surfaceId: this.dragStartSurfaceId,
+        deltaX: gesture.totalDeltaX,
+        deltaY: gesture.totalDeltaY,
+        totalDeltaX: gesture.totalDeltaX,
+        totalDeltaY: gesture.totalDeltaY,
+      });
+    }
   }
 
   /**

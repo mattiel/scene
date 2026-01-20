@@ -97,6 +97,8 @@ export class DOMMirror {
     }
 
     // Apply base styles (visually transparent but focusable)
+    // pointer-events: none ensures canvas receives all pointer input
+    // Mirrors are for keyboard navigation and screen readers only
     Object.assign(element.style, {
       position: 'absolute',
       background: 'transparent',
@@ -108,7 +110,7 @@ export class DOMMirror {
       outlineOffset: '2px',
       // Hidden until position is set
       visibility: this.enabled ? 'visible' : 'hidden',
-      pointerEvents: this.enabled ? 'auto' : 'none',
+      pointerEvents: 'none',
     });
 
     this.container.appendChild(element);
@@ -244,7 +246,7 @@ export class DOMMirror {
 
     for (const entry of this.mirrors.values()) {
       entry.element.style.visibility = enabled ? 'visible' : 'hidden';
-      entry.element.style.pointerEvents = enabled ? 'auto' : 'none';
+      // pointer-events always none - mirrors are for keyboard/screen readers only
       entry.element.tabIndex = enabled ? (entry.config.tabIndex ?? 0) : -1;
     }
   }

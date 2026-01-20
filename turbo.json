@@ -4,7 +4,15 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "inputs": ["src/**", "package.json", "tsconfig.json", "vite.config.ts"],
+      "inputs": [
+        "src/**",
+        "package.json",
+        "tsconfig.json",
+        "vite.config.ts",
+        "tailwind.config.ts",
+        "postcss.config.js",
+        "components.json"
+      ],
       "outputs": ["dist/**"],
       "outputLogs": "new-only"
     },

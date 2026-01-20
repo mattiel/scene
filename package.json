@@ -8,6 +8,8 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
+    "dev:website": "turbo run dev --filter=@scene/website",
+    "build:website": "turbo run build --filter=@scene/website",
     "lint": "turbo run lint",
     "lint:fix": "eslint packages --ext .ts --fix",
     "format": "turbo run format",
@@ -37,7 +39,7 @@
     "prettier": "^3.4.2",
     "turbo": "^2.7.3",
     "typescript": "^5.7.2",
-    "vite": "^6.0.7",
+    "vite": "^7.3.1",
     "vite-plugin-dts": "^4.4.0"
   },
   "engines": {

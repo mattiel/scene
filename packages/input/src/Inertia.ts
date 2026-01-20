@@ -39,10 +39,12 @@ export type InertiaCallback = (state: InertiaState) => void;
  * Inertia configuration options
  */
 export interface InertiaOptions {
-  /** Friction coefficient (0-1, lower = more friction, default: 0.92) */
+  /** Friction coefficient (0-1, lower = more friction, default: 0.92) - used only in 'friction' mode */
   friction?: number;
   /** Minimum velocity to continue animation (default: 0.1 px/ms) */
   minVelocity?: number;
+  /** Maximum velocity cap in px/ms (default: 2.0 = 2000 px/s) */
+  maxVelocity?: number;
   /** Number of samples to use for velocity calculation (default: 5) */
   sampleCount?: number;
   /** Maximum age of samples in ms (default: 100) */
@@ -56,15 +58,22 @@ export interface InertiaOptions {
   };
   /** Bounce coefficient when hitting bounds (0-1, default: 0.5) */
   bounce?: number;
+  /** Decay mode: 'friction' uses multiplicative friction, 'easeOut' uses easeOutExpo curve (default: 'easeOut') */
+  decayMode?: 'friction' | 'easeOut';
+  /** Duration in ms for easeOut decay (default: 1000) */
+  decayDuration?: number;
 }
 
 const DEFAULT_OPTIONS: Required<InertiaOptions> = {
   friction: 0.92,
   minVelocity: 0.1,
+  maxVelocity: 2.0,  // Cap at 2000 px/s for reasonable feel
   sampleCount: 5,
   sampleMaxAge: 100,
   bounds: {},
   bounce: 0.5,
+  decayMode: 'easeOut',
+  decayDuration: 1000,  // 1 second for smooth easeOutExpo decay
 };
 
 /**
@@ -87,6 +96,13 @@ export class Inertia {
   private isActive: boolean = false;
   private animationId: number | null = null;
   private lastTime: number = 0;
+  
+  // EaseOut decay state
+  private decayStartTime: number = 0;
+  private initialVelocityX: number = 0;
+  private initialVelocityY: number = 0;
+  private startX: number = 0;
+  private startY: number = 0;
 
   constructor(options: InertiaOptions = {}) {
     this.options = { ...DEFAULT_OPTIONS, ...options };
@@ -219,7 +235,15 @@ export class Inertia {
     // Cancel any existing animation to prevent orphaned RAF callbacks
     this.stop();
     
-    const { vx, vy } = this.calculateVelocity();
+    let { vx, vy } = this.calculateVelocity();
+    
+    // Cap velocity to maxVelocity for reasonable feel
+    const speed = Math.sqrt(vx * vx + vy * vy);
+    if (speed > this.options.maxVelocity) {
+      const scale = this.options.maxVelocity / speed;
+      vx *= scale;
+      vy *= scale;
+    }
     
     this.velocityX = vx;
     this.velocityY = vy;
@@ -227,8 +251,8 @@ export class Inertia {
     // Check if we have enough velocity to animate
     // Note: We preserve velocityX/Y even if below threshold so consumers
     // can read the actual drag velocity via getState()
-    const speed = Math.sqrt(vx * vx + vy * vy);
-    if (speed < this.options.minVelocity) {
+    const cappedSpeed = Math.sqrt(vx * vx + vy * vy);
+    if (cappedSpeed < this.options.minVelocity) {
       // Don't call stop() here - it would zero out the velocity values
       // that consumers need. Just don't start the animation.
       return;
@@ -237,6 +261,15 @@ export class Inertia {
     this.isActive = true;
     this.lastTime = performance.now();
     this.samples = [];
+    
+    // Store initial state for easeOut mode
+    if (this.options.decayMode === 'easeOut') {
+      this.decayStartTime = this.lastTime;
+      this.initialVelocityX = vx;
+      this.initialVelocityY = vy;
+      this.startX = this.x;
+      this.startY = this.y;
+    }
     
     // Schedule first frame asynchronously so release() returns before any callbacks fire.
     // This ensures dragEnd is emitted before inertia updates begin.
@@ -266,6 +299,14 @@ export class Inertia {
   }
 
   /**
+   * EaseOutExpo: starts fast, decelerates smoothly to a gentle stop
+   * t should be 0-1, returns 0-1
+   */
+  private easeOutExpo(t: number): number {
+    return t >= 1 ? 1 : 1 - Math.pow(2, -10 * t);
+  }
+
+  /**
    * Animation loop
    */
   private animate = (): void => {
@@ -273,28 +314,72 @@ export class Inertia {
     const dt = now - this.lastTime;
     this.lastTime = now;
     
-    // Apply velocity
-    this.x += this.velocityX * dt;
-    this.y += this.velocityY * dt;
-    
-    // Apply friction (time-normalized to ensure consistent physics across refresh rates)
-    // Normalize to 60Hz frame time (16.67ms) so friction behaves the same at any refresh rate
-    const normalizedFriction = Math.pow(this.options.friction, dt / 16.67);
-    this.velocityX *= normalizedFriction;
-    this.velocityY *= normalizedFriction;
-    
-    // Apply bounds
-    this.applyBounds();
-    
-    // Emit callback
-    this.callback?.(this.getState());
-    
-    // Check if we should stop
-    const speed = Math.sqrt(this.velocityX ** 2 + this.velocityY ** 2);
-    if (speed < this.options.minVelocity) {
-      this.stop();
+    if (this.options.decayMode === 'easeOut') {
+      // EaseOut mode: use time-based easeOutExpo curve for smooth deceleration
+      const elapsed = now - this.decayStartTime;
+      const duration = this.options.decayDuration;
+      const t = Math.min(elapsed / duration, 1);
+      
+      // Calculate progress using easeOutExpo
+      const progress = this.easeOutExpo(t);
+      
+      // Total distance = initial velocity (px/ms) * duration / (10 * ln(2))
+      // The 1/(10*ln(2)) ≈ 0.1443 factor is the integral of easeOutExpo velocity decay
+      // This ensures initial velocity matches release velocity exactly
+      const decayFactor = 1 / (10 * Math.LN2);  // ≈ 0.1443
+      const distanceFactorX = this.initialVelocityX * duration * decayFactor;
+      const distanceFactorY = this.initialVelocityY * duration * decayFactor;
+      
+      // Calculate new position
+      const prevX = this.x;
+      const prevY = this.y;
+      this.x = this.startX + distanceFactorX * progress;
+      this.y = this.startY + distanceFactorY * progress;
+      
+      // Derive velocity from position change for consumers
+      if (dt > 0) {
+        this.velocityX = (this.x - prevX) / dt;
+        this.velocityY = (this.y - prevY) / dt;
+      }
+      
+      // Apply bounds (may modify position and velocity)
+      this.applyBounds();
+      
+      // Emit callback
       this.callback?.(this.getState());
-      return;
+      
+      // Check if animation is complete (time-based or velocity-based early termination)
+      const speed = Math.sqrt(this.velocityX ** 2 + this.velocityY ** 2);
+      if (t >= 1 || speed < this.options.minVelocity) {
+        this.stop();
+        this.callback?.(this.getState());
+        return;
+      }
+    } else {
+      // Friction mode: classic multiplicative friction decay
+      // Apply velocity
+      this.x += this.velocityX * dt;
+      this.y += this.velocityY * dt;
+      
+      // Apply friction (time-normalized to ensure consistent physics across refresh rates)
+      // Normalize to 60Hz frame time (16.67ms) so friction behaves the same at any refresh rate
+      const normalizedFriction = Math.pow(this.options.friction, dt / 16.67);
+      this.velocityX *= normalizedFriction;
+      this.velocityY *= normalizedFriction;
+      
+      // Apply bounds
+      this.applyBounds();
+      
+      // Emit callback
+      this.callback?.(this.getState());
+      
+      // Check if we should stop
+      const speed = Math.sqrt(this.velocityX ** 2 + this.velocityY ** 2);
+      if (speed < this.options.minVelocity) {
+        this.stop();
+        this.callback?.(this.getState());
+        return;
+      }
     }
     
     // Continue animation
@@ -305,26 +390,47 @@ export class Inertia {
    * Apply bounds constraints with optional bounce
    */
   private applyBounds(): void {
-    const { bounds, bounce } = this.options;
+    const { bounds, bounce, decayMode } = this.options;
     
     if (bounds.minX !== undefined && this.x < bounds.minX) {
       this.x = bounds.minX;
-      this.velocityX = -this.velocityX * bounce;
+      if (decayMode === 'easeOut') {
+        // In easeOut mode, adjust start position to prevent overshoot
+        this.startX = this.x;
+        this.initialVelocityX = 0;
+      } else {
+        this.velocityX = -this.velocityX * bounce;
+      }
     }
     
     if (bounds.maxX !== undefined && this.x > bounds.maxX) {
       this.x = bounds.maxX;
-      this.velocityX = -this.velocityX * bounce;
+      if (decayMode === 'easeOut') {
+        this.startX = this.x;
+        this.initialVelocityX = 0;
+      } else {
+        this.velocityX = -this.velocityX * bounce;
+      }
     }
     
     if (bounds.minY !== undefined && this.y < bounds.minY) {
       this.y = bounds.minY;
-      this.velocityY = -this.velocityY * bounce;
+      if (decayMode === 'easeOut') {
+        this.startY = this.y;
+        this.initialVelocityY = 0;
+      } else {
+        this.velocityY = -this.velocityY * bounce;
+      }
     }
     
     if (bounds.maxY !== undefined && this.y > bounds.maxY) {
       this.y = bounds.maxY;
-      this.velocityY = -this.velocityY * bounce;
+      if (decayMode === 'easeOut') {
+        this.startY = this.y;
+        this.initialVelocityY = 0;
+      } else {
+        this.velocityY = -this.velocityY * bounce;
+      }
     }
   }
 
