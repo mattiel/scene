@@ -27,6 +27,23 @@ export interface CarouselCardState {
   height: number;
   bend: number;
   opacity?: number;
+  /** Ripple effect origin in normalized coords (0-1) */
+  rippleOrigin?: { x: number; y: number };
+  /** Ripple animation progress (0 = start, 1 = complete) */
+  rippleProgress?: number;
+}
+
+export interface CarouselGlobalState {
+  /** Global bend value applied uniformly across all cards */
+  globalBend?: number;
+  /** Global wave phase offset (typically based on carousel scroll position) */
+  wavePhaseOffset?: number;
+  /** Scroll ripple origin X position in world space */
+  scrollRippleOriginX?: number;
+  /** Scroll ripple intensity based on scroll speed (0-1) */
+  scrollRippleIntensity?: number;
+  /** Scroll ripple direction (-1 = left, 1 = right) */
+  scrollRippleDirection?: number;
 }
 
 export interface CarouselRendererOptions {
@@ -69,6 +86,13 @@ export class CarouselRenderer {
 
   private viewport = { width: 0, height: 0 };
   private initialized = false;
+  private globalState: CarouselGlobalState = {
+    globalBend: 0,
+    wavePhaseOffset: 0,
+    scrollRippleOriginX: 0,
+    scrollRippleIntensity: 0,
+    scrollRippleDirection: 0,
+  };
 
   constructor(
     gpuContext: WebGPUContext,
@@ -104,13 +128,36 @@ export class CarouselRenderer {
     this.viewport.width = width;
     this.viewport.height = height;
 
-    const viewProj = this.computeViewProjection(width, height);
+    this.writeGlobals();
+  }
+
+  setGlobalState(state: CarouselGlobalState): void {
+    this.globalState = { ...this.globalState, ...state };
+    this.writeGlobals();
+  }
+
+  private writeGlobals(): void {
+    if (!this.globals || !this.gpuContext.device) return;
+    if (this.viewport.width <= 0 || this.viewport.height <= 0) return;
+
+    const viewProj = this.computeViewProjection(this.viewport.width, this.viewport.height);
+    
+    // Create buffer: 16 floats for viewProj + 8 floats for globals
+    const data = new Float32Array(24);
+    data.set(viewProj, 0);
+    data[16] = this.globalState.globalBend ?? 0;
+    data[17] = this.globalState.wavePhaseOffset ?? 0;
+    data[18] = this.globalState.scrollRippleOriginX ?? 0;
+    data[19] = this.globalState.scrollRippleIntensity ?? 0;
+    data[20] = this.globalState.scrollRippleDirection ?? 0;
+    // data[21-23] are padding
+
     this.gpuContext.device.queue.writeBuffer(
       this.globals.uniformBuffer,
       0,
-      viewProj.buffer as ArrayBuffer,
-      viewProj.byteOffset,
-      viewProj.byteLength
+      data.buffer as ArrayBuffer,
+      data.byteOffset,
+      data.byteLength
     );
   }
 
@@ -123,7 +170,7 @@ export class CarouselRenderer {
       const texture = this.createTexture(card);
       const uniformBuffer = this.gpuContext.device.createBuffer({
         label: `Carousel Card Uniform (${card.id})`,
-        size: 96, // 16 * f32 (model) + 4 * f32 (bend/opacity/pad)
+        size: 112, // 16 * f32 (model) + 8 * f32 (bend/opacity/ripple/worldX/width/pad)
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
       });
 
@@ -158,11 +205,22 @@ export class CarouselRenderer {
       const model = this.composeModelMatrix(state);
       const bend = state.bend;
       const opacity = state.opacity ?? 1;
+      const rippleOriginX = state.rippleOrigin?.x ?? 0.5;
+      const rippleOriginY = state.rippleOrigin?.y ?? 0.5;
+      const rippleProgress = state.rippleProgress ?? 0;
+      const worldX = state.x;  // Card's world X position for uniform wave calculations
+      const cardWidth = state.width;
 
-      const data = new Float32Array(20);
+      const data = new Float32Array(28);
       data.set(model, 0);
       data[16] = bend;
       data[17] = opacity;
+      data[18] = rippleOriginX;
+      data[19] = rippleOriginY;
+      data[20] = rippleProgress;
+      data[21] = worldX;
+      data[22] = cardWidth;
+      // data[23-27] are padding
 
       this.gpuContext.device.queue.writeBuffer(
         resources.uniformBuffer,
@@ -257,20 +315,31 @@ export class CarouselRenderer {
   }
 
   private registerShaders(): void {
-    if (this.shaderLibrary.has('carousel_vertex')) return;
-
+    // Force re-register shaders (removed cache check for debugging)
     this.shaderLibrary.register('carousel_vertex', {
       code: `
         struct Globals {
           viewProj: mat4x4<f32>,
+          globalBend: f32,
+          wavePhaseOffset: f32,
+          scrollRippleOriginX: f32,
+          scrollRippleIntensity: f32,
+          scrollRippleDirection: f32,
+          _pad0: f32,
+          _pad1: f32,
+          _pad2: f32,
         };
 
         struct CardUniforms {
           model: mat4x4<f32>,
           bend: f32,
           opacity: f32,
+          rippleOriginX: f32,
+          rippleOriginY: f32,
+          rippleProgress: f32,
+          worldX: f32,
+          cardWidth: f32,
           _pad0: f32,
-          _pad1: f32,
         };
 
         @group(0) @binding(0) var<uniform> globals: Globals;
@@ -285,6 +354,7 @@ export class CarouselRenderer {
           @builtin(position) position: vec4f,
           @location(0) uv: vec2f,
           @location(1) bendFactor: f32,
+          @location(2) rippleIntensity: f32,
         };
 
         const PI: f32 = 3.14159265;
@@ -293,35 +363,125 @@ export class CarouselRenderer {
         fn main(input: VertexInput) -> VertexOutput {
           var output: VertexOutput;
           
-          // Input x is -0.5 to 0.5
+          // Input coords: x,y in -0.5 to 0.5
           let x = input.position.x;
+          let y = input.position.y;
           
-          // Bend amount - range typically -1 to 1
-          let b = card.bend;
+          // Use global bend for uniform fabric effect across all cards
+          let b = globals.globalBend;
           let absB = abs(b);
           let signB = sign(b);
           
-          // Directional curl: leading edge lifts based on scroll direction
-          // Soft quadratic falloff from leading to trailing edge
-          let leadingT = clamp((-x * signB + 0.5), 0.0, 1.0); // 1 at leading edge, 0 at trailing
+          // Normalized position within the card (0 to 1)
+          let u = x + 0.5;  // 0 at left, 1 at right
+          let v = y + 0.5;  // 0 at bottom, 1 at top
           
-          // Curl the leading edge forward with smooth falloff
-          let curlAmount = leadingT * leadingT * absB;
-          let curlZ = curlAmount * 120.0 * signB; // Forward lift
+          // Calculate world-space X position of this vertex
+          // This creates a continuous wave across the entire carousel
+          let worldPosX = card.worldX + (x * card.cardWidth);
           
-          // Y lift for paper curl feel
-          let liftY = curlAmount * 0.03;
+          // Normalize world position for wave calculations
+          // Scale factor determines wave frequency across the carousel
+          let waveScale = 0.002;  // Adjust for desired wave wavelength
+          let worldU = worldPosX * waveScale + globals.wavePhaseOffset;
+          
+          // === Uniform fabric wave deformation (world-space) ===
+          
+          // Primary horizontal wave - continuous across all cards (reduced intensity)
+          let wavePhase = worldU * PI * 2.0 - signB * 0.5;
+          let primaryWave = sin(wavePhase) * absB * 8.0;
+          
+          // Secondary vertical ripple - gives fabric depth
+          let verticalRipple = sin(v * PI * 3.0 + worldU * PI) * absB * 3.0;
+          
+          // Gentle edge lift based on world position
+          let worldEdgeFactor = sin(worldU * PI * 0.5) * 0.5 + 0.5;
+          let edgeLift = worldEdgeFactor * absB * 4.0;
+          
+          // Leading edge emphasis based on drag direction (world-space)
+          let leadingT = clamp((-worldU * signB * 0.3 + 0.5), 0.0, 1.0);
+          let leadingWave = leadingT * sin(v * PI * 2.0) * absB * 5.0;
+          
+          // Combine fabric Z deformations
+          var totalZ = (primaryWave + verticalRipple + edgeLift + leadingWave) * signB;
+          
+          // Subtle Y displacement (world-continuous)
+          var yOffset = sin(worldU * PI * 2.0) * absB * 0.008;
+          
+          // Slight horizontal compression
+          var xOffset = signB * absB * 0.01 * (1.0 - leadingT) * sin(v * PI);
+          
+          // === Global scroll ripple - single gentle curl across entire fabric ===
+          var scrollRippleZ: f32 = 0.0;
+          let scrollIntensity = globals.scrollRippleIntensity;
+          
+          if (scrollIntensity > 0.001) {
+            // Very long wavelength - only 1-2 curls visible across entire carousel
+            // Use worldU (which includes scroll offset) so the wave moves with scroll
+            let wavelength = 2000.0;
+            let wavePhaseScroll = worldU * wavelength * 0.01;
+            
+            // Single gentle wave - uniform across all cards, moves with scroll
+            scrollRippleZ = sin(wavePhaseScroll) * scrollIntensity * 15.0;
+            
+            totalZ += scrollRippleZ;
+          }
+          
+          // === Fabric billow - single wind burst from click ===
+          var rippleIntensity: f32 = 0.0;
+          if (card.rippleProgress > 0.0 && card.rippleProgress < 1.0) {
+            let rippleOrigin = vec2f(card.rippleOriginX, card.rippleOriginY);
+            let pos = vec2f(u, v);
+            let toPos = pos - rippleOrigin;
+            let dist = length(toPos);
+            
+            let t = card.rippleProgress;
+            
+            // Single burst envelope - fast attack, easeOutExpo decay
+            let attack = 1.0 - exp(-t * 12.0);
+            // easeOutExpo: 1 - 2^(-10t) - inverted for decay from 1 to 0
+            let decayT = clamp(t / 0.9, 0.0, 1.0);  // Normalize to finish at t=0.9
+            let easeOutExpo = 1.0 - pow(2.0, -10.0 * decayT);
+            let envelope = attack * (1.0 - easeOutExpo);
+            
+            // Wind spreads from click point - single expanding wave
+            let waveTime = t * 2.0;
+            let waveFront = waveTime * 1.5;  // How far the wave has traveled
+            
+            // Single pulse that travels outward from click
+            let distFromWave = dist - waveFront;
+            let pulse = exp(-distFromWave * distFromWave * 8.0);  // Gaussian pulse
+            let behindWave = smoothstep(0.0, 0.3, waveFront - dist);  // Already passed
+            
+            // Main billow - single clean push
+            let billowStrength = envelope * (pulse + behindWave * 0.3);
+            let billow = billowStrength * 100.0;
+            
+            // Subtle variation across surface (not oscillating)
+            let surfaceVar = (1.0 + 0.2 * (u - 0.5) + 0.15 * (v - 0.5));
+            
+            totalZ += billow * surfaceVar;
+            
+            // Outward push from impact point
+            let pushDir = normalize(toPos + vec2f(0.001, 0.001));
+            let pushStrength = billowStrength * 0.12;
+            xOffset += pushDir.x * pushStrength;
+            yOffset += pushDir.y * pushStrength;
+            
+            rippleIntensity = billowStrength;
+          }
           
           var local = vec3f(
-            x,
-            input.position.y + liftY,
-            curlZ
+            x + xOffset,
+            y + yOffset,
+            totalZ
           );
           
           let world = card.model * vec4f(local, 1.0);
           output.position = globals.viewProj * world;
           output.uv = input.uv;
-          output.bendFactor = absB * leadingT;
+          output.bendFactor = absB * (0.5 + 0.5 * abs(sin(wavePhase))) + scrollIntensity * 0.15;
+          output.rippleIntensity = rippleIntensity + scrollIntensity * 0.1;
           
           return output;
         }
@@ -331,26 +491,66 @@ export class CarouselRenderer {
 
     this.shaderLibrary.register('carousel_fragment', {
       code: `
+        struct Globals {
+          viewProj: mat4x4<f32>,
+          globalBend: f32,
+          wavePhaseOffset: f32,
+          scrollRippleOriginX: f32,
+          scrollRippleIntensity: f32,
+          scrollRippleDirection: f32,
+          _pad0: f32,
+          _pad1: f32,
+          _pad2: f32,
+        };
+
         struct CardUniforms {
           model: mat4x4<f32>,
           bend: f32,
           opacity: f32,
+          rippleOriginX: f32,
+          rippleOriginY: f32,
+          rippleProgress: f32,
+          worldX: f32,
+          cardWidth: f32,
           _pad0: f32,
-          _pad1: f32,
         };
 
+        @group(0) @binding(0) var<uniform> globals: Globals;
         @group(1) @binding(0) var<uniform> card: CardUniforms;
         @group(1) @binding(1) var cardSampler: sampler;
         @group(1) @binding(2) var cardTexture: texture_2d<f32>;
 
+        const PI: f32 = 3.14159265;
+
         @fragment
-        fn main(@location(0) uv: vec2f, @location(1) bendFactor: f32) -> @location(0) vec4f {
+        fn main(
+          @location(0) uv: vec2f, 
+          @location(1) bendFactor: f32,
+          @location(2) rippleIntensity: f32
+        ) -> @location(0) vec4f {
           let tex = textureSample(cardTexture, cardSampler, uv);
+          // Use global bend for consistent shading across all cards
+          let absB = abs(globals.globalBend);
+          let scrollIntensity = globals.scrollRippleIntensity;
           
-          // Shading: highlight on lifted edge, shadow on trailing
-          let shading = 1.0 + bendFactor * 0.2 - (1.0 - bendFactor) * abs(card.bend) * 0.1;
+          // Soft fabric-like shading
+          let waveShade = sin(uv.x * PI * 2.0) * 0.08 + sin(uv.y * PI * 3.0) * 0.04;
+          let fabricShade = 1.0 + waveShade * (absB + scrollIntensity * 0.15);
           
-          return vec4f(tex.rgb * shading, tex.a * card.opacity);
+          // Gentle highlight on raised areas
+          let highlight = bendFactor * 0.12;
+          
+          // Soft shadow in valleys
+          let shadow = (1.0 - bendFactor) * absB * 0.06;
+          
+          // Subtle scroll ripple shading
+          let scrollHighlight = rippleIntensity * 0.04;
+          
+          var shading = fabricShade + highlight - shadow + scrollHighlight;
+          
+          let finalColor = tex.rgb * shading;
+          
+          return vec4f(finalColor, tex.a * card.opacity);
         }
       `,
       entryPoints: { fragment: 'main' },
@@ -372,7 +572,7 @@ export class CarouselRenderer {
         entries: [
           {
             binding: 0,
-            visibility: GPUShaderStage.VERTEX,
+            visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
             buffer: { type: 'uniform' },
           },
         ],
@@ -511,9 +711,10 @@ export class CarouselRenderer {
 
   private createGlobals(): void {
     const device = this.gpuContext.device!;
+    // 64 bytes for viewProj (mat4x4) + 32 bytes for globals (bend, phase, ripple params, padding)
     const uniformBuffer = device.createBuffer({
       label: 'Carousel Globals Uniform Buffer',
-      size: 64,
+      size: 96,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 

@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "skipLibCheck": true,
+    "types": ["vite/client", "@webgpu/types", "node"],
+    "baseUrl": ".",
+    "paths": {
+      "@scene/core": ["../packages/core/src/index.ts"],
+      "@scene/surfaces": ["../packages/surfaces/src/index.ts"],
+      "@scene/navigation": ["../packages/navigation/src/index.ts"],
+      "@scene/input": ["../packages/input/src/index.ts"],
+      "@scene/renderer": ["../packages/renderer/src/index.ts"],
+      "@scene/screen": ["../packages/screen/src/index.ts"],
+      "@scene/a11y": ["../packages/a11y/src/index.ts"]
+    }
+  },
+  "include": ["src", "vite.config.ts"]
+}
