@@ -1,43 +1,39 @@
 /**
  * @scene/controllers
  * 
- * High-level interaction controllers for Scene engine.
- * Composes input + motion + constraints into reusable behaviors.
+ * Composable interaction controllers for Scene engine.
+ * Provides primitives for building custom interactions.
+ * 
+ * Inspired by motion library - low-level primitives, not implementations.
  */
 
-// Shared types
+// Shared types - generic building blocks
 export type {
-  // Base types
-  Position,
-  Velocity,
+  // Geometry
+  Point,
+  Velocity2D,
   Bounds1D,
   Bounds2D,
-  // Event payloads
-  BaseEventPayload,
-  Change1DPayload,
-  Change2DPayload,
-  DragStartPayload,
-  DragEnd1DPayload,
-  DragEnd2DPayload,
-  SnapPayload,
-  SnapEndPayload,
-  BoundReached1DPayload,
-  BoundReached2DPayload,
-  // Controller interfaces
-  BaseController,
-  Controller1D,
-  Controller2D,
-  // Carousel types
-  CarouselItemState,
-  CarouselEvents,
-  CarouselConfig,
-  CarouselController,
+  Axis,
+  // Constraints
+  SnapPoint,
+  SnapConfig,
+  InertiaConfig,
+  // State
+  State1D,
+  State2D,
+  // Events
+  ChangeEvent1D,
+  ChangeEvent2D,
+  SnapEvent,
+  BoundEvent1D,
+  BoundEvent2D,
   // Utilities
   EventCallback,
   Unsubscribe,
 } from './types';
 
-// Scrollable - 1D scroll with bounds, snap, inertia, wheel
+// Scrollable - 1D controller with bounds, snap, inertia, wheel
 export { Scrollable } from './Scrollable';
 export type {
   ScrollableConfig,
@@ -45,7 +41,7 @@ export type {
   ScrollableCallback,
 } from './Scrollable';
 
-// Draggable - 2D drag with inertia, constraints
+// Draggable - 2D controller with bounds, axis lock, inertia
 export { Draggable } from './Draggable';
 export type {
   DraggableConfig,
@@ -53,4 +49,6 @@ export type {
   DraggableCallback,
   DraggableBounds,
   DragAxis,
+  Position,
+  Velocity,
 } from './Draggable';

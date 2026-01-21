@@ -1,33 +1,32 @@
 /**
  * @scene/controllers - Shared Types
  * 
- * Common type definitions for all controller implementations.
+ * Generic type definitions for composable interaction controllers.
+ * Inspired by motion library - primitives over implementations.
  */
-
-import type { SceneValue } from '@scene/motion';
 
 // ============================================
 // Base Types
 // ============================================
 
 /**
- * 2D position
+ * 2D point/position
  */
-export interface Position {
+export interface Point {
   x: number;
   y: number;
 }
 
 /**
- * 2D velocity
+ * 2D velocity vector
  */
-export interface Velocity {
+export interface Velocity2D {
   x: number;
   y: number;
 }
 
 /**
- * 1D bounds
+ * 1D bounds constraint
  */
 export interface Bounds1D {
   min?: number;
@@ -35,7 +34,7 @@ export interface Bounds1D {
 }
 
 /**
- * 2D bounds
+ * 2D bounds constraint
  */
 export interface Bounds2D {
   minX?: number;
@@ -45,259 +44,154 @@ export interface Bounds2D {
 }
 
 // ============================================
-// Event System
+// Constraint Types
 // ============================================
 
 /**
- * Base event payload - all events include timestamp
+ * Axis constraint for drag operations
  */
-export interface BaseEventPayload {
-  /** Event timestamp (performance.now()) */
-  timestamp: number;
+export type Axis = 'x' | 'y' | 'both';
+
+/**
+ * Snap point definition
+ */
+export interface SnapPoint {
+  /** Position to snap to */
+  position: number;
+  /** Optional label/identifier */
+  id?: string;
 }
 
 /**
- * Change event payload for 1D controllers
+ * Snap configuration
  */
-export interface Change1DPayload extends BaseEventPayload {
-  /** Current offset value */
+export interface SnapConfig {
+  /** Snap points */
+  points: number[] | SnapPoint[];
+  /** Distance threshold to trigger snap */
+  threshold?: number;
+  /** Velocity threshold - faster releases skip snap */
+  velocityThreshold?: number;
+}
+
+// ============================================
+// Inertia Configuration
+// ============================================
+
+/**
+ * Inertia/momentum configuration
+ */
+export interface InertiaConfig {
+  /** Enable inertia on release (default: true) */
+  enabled?: boolean;
+  /** Friction coefficient 0-1 (default: 0.92) */
+  friction?: number;
+  /** Minimum velocity to start inertia */
+  minVelocity?: number;
+  /** Maximum velocity cap */
+  maxVelocity?: number;
+  /** Decay duration in ms */
+  duration?: number;
+  /** Bounce coefficient at bounds 0-1 (default: 0) */
+  bounce?: number;
+}
+
+// ============================================
+// Controller State
+// ============================================
+
+/**
+ * 1D controller state snapshot
+ */
+export interface State1D {
+  /** Current offset/position */
   offset: number;
   /** Current velocity */
   velocity: number;
+  /** Whether actively dragging */
+  isDragging: boolean;
+  /** Whether inertia is active */
+  isAnimating: boolean;
 }
 
 /**
- * Change event payload for 2D controllers
+ * 2D controller state snapshot
  */
-export interface Change2DPayload extends BaseEventPayload {
+export interface State2D {
   /** Current position */
-  position: Position;
+  position: Point;
   /** Current velocity */
-  velocity: Velocity;
+  velocity: Velocity2D;
+  /** Whether actively dragging */
+  isDragging: boolean;
+  /** Whether inertia is active */
+  isAnimating: boolean;
 }
 
-/**
- * Drag start event payload
- */
-export interface DragStartPayload extends BaseEventPayload {
-  /** Position/offset at drag start */
-  position: Position | number;
-}
+// ============================================
+// Event Types
+// ============================================
 
 /**
- * Drag end event payload for 1D
+ * Generic change event for 1D controllers
  */
-export interface DragEnd1DPayload extends BaseEventPayload {
-  /** Final offset */
+export interface ChangeEvent1D {
+  /** Current offset */
   offset: number;
-  /** Velocity at release */
+  /** Current velocity */
   velocity: number;
 }
 
 /**
- * Drag end event payload for 2D
+ * Generic change event for 2D controllers
  */
-export interface DragEnd2DPayload extends BaseEventPayload {
-  /** Final position */
-  position: Position;
-  /** Velocity at release */
-  velocity: Velocity;
+export interface ChangeEvent2D {
+  /** Current position */
+  position: Point;
+  /** Current velocity */
+  velocity: Velocity2D;
 }
 
 /**
- * Snap event payload
+ * Snap event
  */
-export interface SnapPayload extends BaseEventPayload {
-  /** Starting position/offset */
+export interface SnapEvent {
+  /** Starting position */
   from: number;
-  /** Target position/offset */
+  /** Target position */
   to: number;
 }
 
 /**
- * Snap end event payload
+ * Bound reached event
  */
-export interface SnapEndPayload extends BaseEventPayload {
-  /** Final position/offset */
-  offset: number;
-}
-
-/**
- * Bound reached event payload for 1D
- */
-export interface BoundReached1DPayload extends BaseEventPayload {
-  /** Which bound was reached */
+export interface BoundEvent1D {
+  /** Which bound */
   bound: 'min' | 'max';
-  /** Offset at bound */
-  offset: number;
-}
-
-/**
- * Bound reached event payload for 2D
- */
-export interface BoundReached2DPayload extends BaseEventPayload {
-  /** Which bounds were reached */
-  bounds: ('minX' | 'maxX' | 'minY' | 'maxY')[];
   /** Position at bound */
-  position: Position;
-}
-
-// ============================================
-// Controller Interfaces
-// ============================================
-
-/**
- * Base controller interface
- * All controllers implement these common methods
- */
-export interface BaseController {
-  /** Whether currently dragging */
-  readonly isDragging: boolean;
-  /** Whether inertia/animation is active */
-  readonly hasInertia: boolean;
-  /** Handle drag start */
-  handleDragStart(): void;
-  /** Destroy the controller and clean up */
-  destroy(): void;
-}
-
-/**
- * 1D controller interface (Scrollable, Carousel)
- */
-export interface Controller1D extends BaseController {
-  /** Current offset */
-  readonly offset: number;
-  /** Current velocity */
-  readonly velocity: number;
-  /** Set offset directly */
-  setOffset(offset: number): void;
-  /** Snap to target */
-  snapTo(target: number): void;
-  /** Handle drag delta */
-  handleDrag(delta: number): void;
-  /** Handle drag end */
-  handleDragEnd(velocity?: number): void;
-}
-
-/**
- * 2D controller interface (Draggable)
- */
-export interface Controller2D extends BaseController {
-  /** Current position */
-  readonly position: Position;
-  /** Current velocity */
-  readonly velocity: Velocity;
-  /** Set position directly */
-  setPosition(position: Position): void;
-  /** Handle drag delta */
-  handleDrag(deltaX: number, deltaY: number): void;
-  /** Handle drag end */
-  handleDragEnd(velocityX?: number, velocityY?: number): void;
-}
-
-// ============================================
-// Carousel Controller Interface
-// ============================================
-
-/**
- * Carousel item state
- */
-export interface CarouselItemState<T = unknown> {
-  /** Item data */
-  data: T;
-  /** Current index in the carousel */
-  index: number;
-  /** Visual offset from center (in units) */
   offset: number;
-  /** Whether this is the active/center item */
-  isActive: boolean;
-  /** Whether this item is visible */
-  isVisible: boolean;
-  /** Progress through the carousel (0-1) */
-  progress: number;
 }
 
 /**
- * Carousel controller events
+ * Bound reached event for 2D
  */
-export interface CarouselEvents<T = unknown> {
-  /** Carousel offset changed */
-  change: Change1DPayload & { activeIndex: number };
-  /** Active item changed */
-  indexChange: BaseEventPayload & { 
-    index: number; 
-    previousIndex: number;
-    item: T;
-  };
-  /** Snap started */
-  snapStart: SnapPayload;
-  /** Snap completed */
-  snapEnd: SnapEndPayload & { index: number };
-  /** Reached start or end of carousel */
-  boundReached: BoundReached1DPayload;
-}
-
-/**
- * Carousel controller configuration
- */
-export interface CarouselConfig<T = unknown> {
-  /** Items in the carousel */
-  items: T[];
-  /** Initial active index */
-  initialIndex?: number;
-  /** Loop continuously */
-  loop?: boolean;
-  /** Drag sensitivity */
-  dragSensitivity?: number;
-  /** Wheel sensitivity */
-  wheelSensitivity?: number;
-  /** Auto-snap to nearest item */
-  autoSnap?: boolean;
-  /** SceneValue to bind offset */
-  sceneValue?: SceneValue;
-  /** Reduced motion mode */
-  reducedMotion?: boolean;
-}
-
-/**
- * Generic carousel controller interface
- * 
- * @template T - Type of items in the carousel
- */
-export interface CarouselController<T = unknown> extends Controller1D {
-  /** Total number of items */
-  readonly itemCount: number;
-  /** Currently active index */
-  readonly activeIndex: number;
-  /** Get state for all visible items */
-  getVisibleItems(): CarouselItemState<T>[];
-  /** Get state for a specific item */
-  getItemState(index: number): CarouselItemState<T>;
-  /** Go to a specific index */
-  goTo(index: number, animate?: boolean): void;
-  /** Go to next item */
-  next(): void;
-  /** Go to previous item */
-  prev(): void;
-  /** Subscribe to events */
-  on<K extends keyof CarouselEvents<T>>(
-    event: K, 
-    callback: (payload: CarouselEvents<T>[K]) => void
-  ): () => void;
-  /** Bind offset to a SceneValue */
-  bindToSceneValue(sceneValue: SceneValue): () => void;
+export interface BoundEvent2D {
+  /** Which bounds were hit */
+  bounds: ('minX' | 'maxX' | 'minY' | 'maxY')[];
+  /** Position at bounds */
+  position: Point;
 }
 
 // ============================================
-// Event Helper Types
+// Utility Types
 // ============================================
 
 /**
- * Extract event callback type from an event map
- */
-export type EventCallback<E, K extends keyof E> = (payload: E[K]) => void;
-
-/**
- * Unsubscribe function returned by event subscriptions
+ * Unsubscribe function
  */
 export type Unsubscribe = () => void;
+
+/**
+ * Event callback
+ */
+export type EventCallback<T> = (event: T) => void;
