@@ -97,7 +97,96 @@ export const springs = {
    * Matches iOS UIKit's default spring
    */
   ios: spring(500, 30),
+
+  // === New Phase 9 presets ===
+
+  /**
+   * High bounce spring
+   * Maximum overshoot for playful, attention-grabbing animations
+   */
+  bounce: spring(450, 10),
+
+  /**
+   * Rubber-band spring
+   * Elastic feel like stretching rubber, good for overscroll
+   */
+  rubber: spring(200, 12, 0.8),
+
+  /**
+   * Very stiff, almost instant
+   * Near-instant response with minimal overshoot
+   */
+  rigid: spring(1000, 50),
+
+  /**
+   * Gentle settle spring
+   * Very soft landing, good for dropping/placing items
+   */
+  settle: spring(180, 22),
+
+  /**
+   * Wobbly spring
+   * Extended oscillation for playful jelly-like effects
+   */
+  wobbly: spring(300, 8),
+
+  /**
+   * Heavy spring
+   * High mass feels weighty and deliberate
+   */
+  heavy: spring(300, 35, 2),
+
+  /**
+   * Light spring
+   * Low mass feels airy and responsive
+   */
+  light: spring(400, 25, 0.5),
+
+  /**
+   * Snap spring
+   * Sharp deceleration, good for snapping to positions
+   */
+  snap: spring(600, 45),
+
+  /**
+   * Fluid spring
+   * Liquid-like motion, smooth without being slow
+   */
+  fluid: spring(250, 28),
+
+  /**
+   * Crisp spring
+   * Clean, professional motion for UI elements
+   */
+  crisp: spring(550, 38),
 } as const;
+
+/**
+ * Spring preset names
+ */
+export type SpringPreset = keyof typeof springs;
+
+/**
+ * Get a spring configuration by preset name
+ * 
+ * @param name - Name of the preset
+ * @returns Spring configuration
+ * 
+ * @example
+ * ```typescript
+ * import { fromPreset, SceneValue } from '@scene/motion';
+ * 
+ * const value = new SceneValue(0);
+ * value.animateTo(100, fromPreset('bouncy'));
+ * 
+ * // Dynamic preset selection
+ * const preset = userPreference === 'playful' ? 'wobbly' : 'crisp';
+ * value.animateTo(100, fromPreset(preset));
+ * ```
+ */
+export function fromPreset(name: SpringPreset): SpringConfig {
+  return springs[name];
+}
 
 /**
  * Create a custom spring configuration

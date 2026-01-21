@@ -9,9 +9,12 @@
 export {
   SceneValue,
   SceneValue2D,
+  DerivedSceneValue,
   createSceneValue,
   type ValueChangeCallback,
+  type VelocityChangeCallback,
   type SceneValueOptions,
+  type InterpolateOptions,
   type UniformTarget,
 } from './SceneValue';
 
@@ -20,7 +23,9 @@ export {
   springs,
   tweens,
   createSpring,
+  fromPreset,
   type SpringConfig,
+  type SpringPreset,
   type TweenConfig,
   type AnimationConfig,
 } from './springs';

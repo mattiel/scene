@@ -12,6 +12,9 @@ import { springs } from './springs';
 /** Callback for value change events */
 export type ValueChangeCallback = (value: number) => void;
 
+/** Callback for velocity change events */
+export type VelocityChangeCallback = (velocity: number) => void;
+
 /** Options for SceneValue animations */
 export interface SceneValueOptions {
   /** Initial value */
@@ -20,6 +23,20 @@ export interface SceneValueOptions {
   clamp?: { min?: number; max?: number };
   /** Round value to nearest integer */
   round?: boolean;
+  /** Track velocity (enables velocity events) */
+  trackVelocity?: boolean;
+}
+
+/** Interpolation range mapping */
+export interface InterpolateOptions {
+  /** Input range [from, to] */
+  inputRange: [number, number];
+  /** Output range [from, to] */
+  outputRange: [number, number];
+  /** Clamp output to outputRange bounds */
+  clamp?: boolean;
+  /** Extrapolation method when outside inputRange */
+  extrapolate?: 'extend' | 'clamp' | 'identity';
 }
 
 /**
@@ -52,17 +69,24 @@ export interface UniformTarget {
  */
 export class SceneValue {
   private _value: number;
+  private _velocity: number = 0;
+  private _lastValue: number;
+  private _lastTime: number = 0;
   private listeners: Set<ValueChangeCallback> = new Set();
+  private velocityListeners: Set<VelocityChangeCallback> = new Set();
   private bindings: Map<UniformTarget, string> = new Map();
   private animation: AnimationPlaybackControls | null = null;
   private options: SceneValueOptions;
+  private derivedValues: Set<DerivedSceneValue> = new Set();
 
   constructor(initial = 0, options: SceneValueOptions = {}) {
     this._value = initial;
+    this._lastValue = initial;
     this.options = options;
     
     if (options.initial !== undefined) {
       this._value = options.initial;
+      this._lastValue = options.initial;
     }
   }
 
@@ -155,6 +179,114 @@ export class SceneValue {
   }
 
   /**
+   * Get current velocity (requires trackVelocity option)
+   */
+  get velocity(): number {
+    return this._velocity;
+  }
+
+  // ============================================
+  // Derived Values
+  // ============================================
+
+  /**
+   * Create a derived value that automatically updates when this value changes
+   * 
+   * @param transform - Function to transform the value
+   * @returns A new SceneValue that stays in sync
+   * 
+   * @example
+   * ```typescript
+   * const offset = new SceneValue(0);
+   * 
+   * // Create a derived value that's always double
+   * const doubled = offset.derive(v => v * 2);
+   * 
+   * // Create a normalized progress (0-1)
+   * const progress = offset.derive(v => v / maxOffset);
+   * 
+   * // Chain derives
+   * const opacity = progress.derive(p => 1 - p);
+   * ```
+   */
+  derive(transform: (value: number) => number): DerivedSceneValue {
+    const derived = new DerivedSceneValue(this, transform);
+    this.derivedValues.add(derived);
+    return derived;
+  }
+
+  /**
+   * Create an interpolated value that maps this value to a different range
+   * 
+   * @param options - Interpolation options
+   * @returns A new SceneValue that interpolates this value
+   * 
+   * @example
+   * ```typescript
+   * const scroll = new SceneValue(0);
+   * 
+   * // Map scroll 0-1000 to opacity 1-0
+   * const opacity = scroll.interpolate({
+   *   inputRange: [0, 1000],
+   *   outputRange: [1, 0],
+   *   clamp: true
+   * });
+   * 
+   * // Map scroll 0-500 to scale 1-1.5
+   * const scale = scroll.interpolate({
+   *   inputRange: [0, 500],
+   *   outputRange: [1, 1.5],
+   *   extrapolate: 'clamp'
+   * });
+   * ```
+   */
+  interpolate(options: InterpolateOptions): DerivedSceneValue {
+    const { inputRange, outputRange, clamp = false, extrapolate = 'extend' } = options;
+    const [inMin, inMax] = inputRange;
+    const [outMin, outMax] = outputRange;
+    
+    return this.derive((value) => {
+      // Calculate normalized position in input range
+      let t = (value - inMin) / (inMax - inMin);
+      
+      // Handle extrapolation
+      if (t < 0 || t > 1) {
+        if (extrapolate === 'clamp' || clamp) {
+          t = Math.max(0, Math.min(1, t));
+        } else if (extrapolate === 'identity') {
+          return value;
+        }
+        // 'extend' continues linearly
+      }
+      
+      // Map to output range
+      return outMin + t * (outMax - outMin);
+    });
+  }
+
+  /**
+   * Remove a derived value (called internally when derived is destroyed)
+   */
+  _removeDerived(derived: DerivedSceneValue): void {
+    this.derivedValues.delete(derived);
+  }
+
+  // ============================================
+  // Velocity Tracking
+  // ============================================
+
+  /**
+   * Subscribe to velocity changes
+   * Only fires if trackVelocity option is enabled
+   */
+  onVelocityChange(callback: VelocityChangeCallback): () => void {
+    this.velocityListeners.add(callback);
+    return () => {
+      this.velocityListeners.delete(callback);
+    };
+  }
+
+  /**
    * Subscribe to value changes
    * 
    * @param callback - Function called with new value on each change
@@ -204,7 +336,14 @@ export class SceneValue {
   destroy(): void {
     this.stop();
     this.listeners.clear();
+    this.velocityListeners.clear();
     this.bindings.clear();
+    
+    // Destroy all derived values
+    for (const derived of this.derivedValues) {
+      derived.destroy();
+    }
+    this.derivedValues.clear();
   }
 
   /**
@@ -226,6 +365,32 @@ export class SceneValue {
     // Skip if value hasn't changed
     if (value === this._value) return;
 
+    // Track velocity if enabled
+    if (this.options.trackVelocity) {
+      const now = performance.now();
+      const dt = now - this._lastTime;
+      
+      if (dt > 0 && this._lastTime > 0) {
+        const newVelocity = (value - this._lastValue) / dt * 1000; // velocity per second
+        
+        if (newVelocity !== this._velocity) {
+          this._velocity = newVelocity;
+          
+          // Notify velocity listeners
+          for (const listener of this.velocityListeners) {
+            try {
+              listener(this._velocity);
+            } catch (error) {
+              console.error('Error in SceneValue velocity listener:', error);
+            }
+          }
+        }
+      }
+      
+      this._lastValue = value;
+      this._lastTime = now;
+    }
+
     this._value = value;
 
     // Notify listeners
@@ -245,6 +410,131 @@ export class SceneValue {
         console.error('Error updating bound uniform:', error);
       }
     }
+
+    // Update derived values
+    for (const derived of this.derivedValues) {
+      derived._update();
+    }
+  }
+}
+
+/**
+ * DerivedSceneValue - A read-only value derived from another SceneValue
+ * 
+ * Created via SceneValue.derive() or SceneValue.interpolate()
+ */
+export class DerivedSceneValue {
+  private source: SceneValue;
+  private transform: (value: number) => number;
+  private _value: number;
+  private listeners: Set<ValueChangeCallback> = new Set();
+  private bindings: Map<UniformTarget, string> = new Map();
+
+  constructor(source: SceneValue, transform: (value: number) => number) {
+    this.source = source;
+    this.transform = transform;
+    this._value = transform(source.get());
+  }
+
+  /**
+   * Get the current derived value
+   */
+  get(): number {
+    return this._value;
+  }
+
+  /**
+   * Subscribe to value changes
+   */
+  on(event: 'change', callback: ValueChangeCallback): () => void {
+    if (event !== 'change') {
+      throw new Error(`Unknown event: ${event}`);
+    }
+    
+    this.listeners.add(callback);
+    return () => {
+      this.listeners.delete(callback);
+    };
+  }
+
+  /**
+   * Bind this value to a material uniform
+   */
+  bindTo(target: UniformTarget, uniformName: string): () => void {
+    this.bindings.set(target, uniformName);
+    target.setUniform(uniformName, this._value);
+    
+    return () => {
+      this.bindings.delete(target);
+    };
+  }
+
+  /**
+   * Create a further derived value
+   */
+  derive(transform: (value: number) => number): DerivedSceneValue {
+    return this.source.derive((v) => transform(this.transform(v)));
+  }
+
+  /**
+   * Create an interpolated value from this derived value
+   */
+  interpolate(options: InterpolateOptions): DerivedSceneValue {
+    const { inputRange, outputRange, clamp = false, extrapolate = 'extend' } = options;
+    const [inMin, inMax] = inputRange;
+    const [outMin, outMax] = outputRange;
+    
+    return this.derive((value) => {
+      let t = (value - inMin) / (inMax - inMin);
+      
+      if (t < 0 || t > 1) {
+        if (extrapolate === 'clamp' || clamp) {
+          t = Math.max(0, Math.min(1, t));
+        } else if (extrapolate === 'identity') {
+          return value;
+        }
+      }
+      
+      return outMin + t * (outMax - outMin);
+    });
+  }
+
+  /**
+   * Internal: Update derived value when source changes
+   */
+  _update(): void {
+    const newValue = this.transform(this.source.get());
+    
+    if (newValue === this._value) return;
+    
+    this._value = newValue;
+
+    // Notify listeners
+    for (const listener of this.listeners) {
+      try {
+        listener(newValue);
+      } catch (error) {
+        console.error('Error in DerivedSceneValue listener:', error);
+      }
+    }
+
+    // Update bound uniforms
+    for (const [target, uniformName] of this.bindings) {
+      try {
+        target.setUniform(uniformName, newValue);
+      } catch (error) {
+        console.error('Error updating bound uniform:', error);
+      }
+    }
+  }
+
+  /**
+   * Clean up
+   */
+  destroy(): void {
+    this.source._removeDerived(this);
+    this.listeners.clear();
+    this.bindings.clear();
   }
 }
 
