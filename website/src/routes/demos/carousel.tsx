@@ -1,13 +1,31 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+/**
+ * Carousel Demo - Refactored with @scene/react
+ * 
+ * Uses SceneProvider, useCarousel, and useSurface hooks
+ * for declarative Scene integration.
+ */
+
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
-import { Engine, InteractionMode } from '@scene/core';
-import { Surface, SurfaceRegistry, LayoutTracker } from '@scene/surfaces';
-import { InputManager } from '@scene/input';
+import { InteractionMode } from '@scene/core';
 import { A11yManager } from '@scene/a11y';
-import { TransitionCoordinator } from '@scene/navigation';
-import { CarouselRenderer, ShaderLibrary, WebGPUContext } from '@scene/renderer';
+import { ShaderLibrary, WebGPUContext } from '@scene/renderer';
 import { registerTransitionShaders } from '@scene/screen';
+import { SceneProvider, useSceneContext } from '@scene/react';
 import { StatusPanel } from '../../components/StatusPanel';
+
+// User-level carousel implementation (not part of Scene framework)
+import {
+  CarouselRenderer,
+  useCarousel,
+  useCarouselPointerEvents,
+  type UseCarouselConfig,
+  type CarouselItemState,
+} from '../../lib/carousel';
+
+// ============================================
+// Types
+// ============================================
 
 interface CardData {
   id: string;
@@ -15,6 +33,7 @@ interface CardData {
   subtitle: string;
   body: string;
   image: string;
+  label: string;
 }
 
 interface CardTexture {
@@ -24,21 +43,9 @@ interface CardTexture {
   source: HTMLCanvasElement;
 }
 
-interface CardState {
-  id: string;
-  x: number;
-  y: number;
-  z: number;
-  rotationY: number;
-  width: number;
-  height: number;
-  bend: number;
-  opacity: number;
-}
-
-export const Route = createFileRoute('/demos/carousel')({
-  component: CarouselDemo,
-});
+// ============================================
+// Data
+// ============================================
 
 const CARD_DATA: CardData[] = [
   {
@@ -47,6 +54,7 @@ const CARD_DATA: CardData[] = [
     subtitle: 'Polar light study',
     body: 'A cinematic pass that reacts to drag velocity. The center card floats forward as the arc stabilizes.',
     image: 'https://images.unsplash.com/photo-1531366936337-7c912a4589a7?w=600&h=800&fit=crop',
+    label: 'Aurora Drift',
   },
   {
     id: 'card-ember',
@@ -54,6 +62,7 @@ const CARD_DATA: CardData[] = [
     subtitle: 'Heat shimmer',
     body: 'Tracked surfaces map directly to DOM elements. Motion values drive distortion without owning timelines.',
     image: 'https://images.unsplash.com/photo-1518173946687-a4c036bc3c95?w=600&h=800&fit=crop',
+    label: 'Ember Field',
   },
   {
     id: 'card-orbit',
@@ -61,6 +70,7 @@ const CARD_DATA: CardData[] = [
     subtitle: 'Parallax grid',
     body: 'Picking uses CPU intersection for now, keeping GPU dedicated to visual effects only.',
     image: 'https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=600&h=800&fit=crop',
+    label: 'Orbit Lattice',
   },
   {
     id: 'card-chorus',
@@ -68,6 +78,7 @@ const CARD_DATA: CardData[] = [
     subtitle: 'Dissolve transition',
     body: 'TransitionCoordinator clones ghost surfaces so visuals can persist across view changes.',
     image: 'https://images.unsplash.com/photo-1507400492013-162706c8c05e?w=600&h=800&fit=crop',
+    label: 'Chorus Fold',
   },
   {
     id: 'card-surge',
@@ -75,6 +86,7 @@ const CARD_DATA: CardData[] = [
     subtitle: 'Vignette pulse',
     body: 'Screen effects stack is ready for post-processing passes, gated behind WebGPU availability.',
     image: 'https://images.unsplash.com/photo-1501630834273-4b5604d2ee31?w=600&h=800&fit=crop',
+    label: 'Surge Bloom',
   },
   {
     id: 'card-drift',
@@ -82,6 +94,7 @@ const CARD_DATA: CardData[] = [
     subtitle: 'Glide inertia',
     body: 'Inertia continues rotation after drag end. The carousel settles with reduced-motion support.',
     image: 'https://images.unsplash.com/photo-1508739773434-c26b3d09e071?w=600&h=800&fit=crop',
+    label: 'Driftline',
   },
   {
     id: 'card-veil',
@@ -89,6 +102,7 @@ const CARD_DATA: CardData[] = [
     subtitle: 'Focus sync',
     body: 'A11y mirrors stay in sync with selection and activation, keeping keyboard navigation intact.',
     image: 'https://images.unsplash.com/photo-1534796636912-3b95b3ab5986?w=600&h=800&fit=crop',
+    label: 'Veil Echo',
   },
 ];
 
@@ -99,466 +113,267 @@ const CARD_THEMES = [
   { primary: '#191919', secondary: '#101010' },
 ];
 
+const CONFIG = {
+  cardSpacing: 320,
+  cardWidth: 300,
+  cardHeight: 420,
+  cameraZ: 1200,
+  bendScale: 3.0,
+  bendClamp: 1.2,
+};
+
+// ============================================
+// Route Export
+// ============================================
+
+export const Route = createFileRoute('/demos/carousel')({
+  component: CarouselPage,
+});
+
+function CarouselPage() {
+  return (
+    <SceneProvider mode="canvas-interactive" trackFPS>
+      <CarouselDemo />
+    </SceneProvider>
+  );
+}
+
+// ============================================
+// Main Component
+// ============================================
+
 function CarouselDemo() {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const mirrorRef = useRef<HTMLDivElement | null>(null);
-  const trackRef = useRef<HTMLDivElement | null>(null);
-  const fallbackRef = useRef<HTMLDivElement | null>(null);
-  const rootRef = useRef<HTMLDivElement | null>(null);
+  const { engine, registry, layoutTracker } = useSceneContext();
+  
+  // Refs
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const mirrorRef = useRef<HTMLDivElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef<Map<string, HTMLElement>>(new Map());
   const bodyRefs = useRef<Map<string, HTMLParagraphElement>>(new Map());
+  
+  // Carousel ref - declared early so callbacks can access it
+  const carouselRef = useRef<ReturnType<typeof useCarousel> | null>(null);
+  
+  // State
   const [statusMessage, setStatusMessage] = useState('Initializing...');
   const [centerTitle, setCenterTitle] = useState('--');
   const [gpuReady, setGpuReady] = useState(false);
   const [debugLogs, setDebugLogs] = useState<string[]>([]);
-
+  
+  // GPU resources ref
+  const gpuRef = useRef<{
+    context: WebGPUContext;
+    shaderLibrary: ShaderLibrary | null;
+    carousel: CarouselRenderer | null;
+    ready: boolean;
+  }>({
+    context: new WebGPUContext(),
+    shaderLibrary: null,
+    carousel: null,
+    ready: false,
+  });
+  
+  // Animation state (for bend/ripple effects)
+  const animStateRef = useRef({
+    bend: 0,
+    ripples: new Map<string, { originX: number; originY: number; progress: number }>(),
+    scrollRippleIntensity: 0,
+    scrollRipplePeak: 0,
+    scrollRippleDecayT: 0,
+    scrollRippleOriginX: 0,
+    scrollRippleDirection: 0,
+  });
+  
+  const prefersReducedMotion = useMemo(
+    () => window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+    []
+  );
+  
+  // Carousel config - cast CARD_DATA to CarouselItem[] since it has id/label
+  const carouselItems = useMemo(() => 
+    CARD_DATA.map(card => ({ id: card.id, label: card.label, data: card })),
+    []
+  );
+  
+  const carouselConfig: UseCarouselConfig = useMemo(() => ({
+    items: carouselItems,
+    itemSpacing: CONFIG.cardSpacing,
+    centerSnap: true,
+    wheelSensitivity: 0.8,
+    dragSensitivity: 2.5,
+    friction: prefersReducedMotion ? 0.75 : 0.92,
+    reducedMotion: prefersReducedMotion,
+    onCenterChange: ({ item }) => {
+      const card = item.data as CardData;
+      setCenterTitle(card.title);
+    },
+    onItemTap: ({ item, x, y }) => {
+      // Trigger ripple effect (expand/collapse is handled by Carousel.handleItemTap automatically)
+      const card = item.data as CardData;
+      const el = cardRefs.current.get(card.id);
+      if (el) {
+        const rect = el.getBoundingClientRect();
+        const normalizedX = Math.max(0, Math.min(1, (x - rect.x) / rect.width));
+        const normalizedY = Math.max(0, Math.min(1, (y - rect.y) / rect.height));
+        animStateRef.current.ripples.set(card.id, {
+          originX: normalizedX,
+          originY: normalizedY,
+          progress: 0.001,
+        });
+      }
+    },
+    onOffsetChange: ({ velocity }) => {
+      // Update scroll ripple - unified fabric wave across all cards
+      const speed = Math.abs(velocity) * 0.025;
+      const normalizedSpeed = Math.min(Math.pow(speed, 0.55) * 1.0, 0.7);
+      const anim = animStateRef.current;
+      if (normalizedSpeed > anim.scrollRippleIntensity) {
+        anim.scrollRippleIntensity = normalizedSpeed;
+        anim.scrollRipplePeak = normalizedSpeed;
+        anim.scrollRippleDecayT = 0;
+      }
+      anim.scrollRippleDirection = velocity > 0 ? 1 : velocity < 0 ? -1 : anim.scrollRippleDirection;
+    },
+  }), [prefersReducedMotion, carouselItems]);
+  
+  const carousel = useCarousel(carouselConfig);
+  const pointerEvents = useCarouselPointerEvents(carousel);
+  
+  // Update carousel ref for use in callbacks and render loop
+  carouselRef.current = carousel;
+  
+  // Direct click handler for tap detection
+  const handleCanvasClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    console.log('[Carousel Demo] Canvas clicked at:', e.clientX, e.clientY);
+    
+    const currentCarousel = carouselRef.current;
+    if (!currentCarousel) return;
+    
+    const clickX = e.clientX;
+    const clickY = e.clientY;
+    const centerX = window.innerWidth / 2;
+    const centerY = window.innerHeight / 2;
+    
+    // Find the item closest to the click (use live controller state)
+    const itemStates = currentCarousel.carousel.computeItemStates();
+    for (const state of itemStates) {
+      const itemX = centerX + state.x;
+      const dx = Math.abs(clickX - itemX);
+      const dy = Math.abs(clickY - centerY);
+      
+      if (dx < 180 && dy < 240) {
+        console.log('[Carousel Demo] Found item:', state.item.id);
+        currentCarousel.handleItemTap(state.item.id, clickX, clickY);
+        return;
+      }
+    }
+    console.log('[Carousel Demo] No item at click position');
+  }, []);
+  
+  // Status items for panel
   const statusItems = useMemo(
     () => [
       { id: 'status', message: statusMessage, tone: 'info' as const },
-      ...debugLogs.map((log, i) => { 
+      ...debugLogs.map((log, i) => {
         const tone: 'error' | 'info' = log.includes('failed') || log.includes('null') ? 'error' : 'info';
         return { id: `debug-${i}`, message: log, tone };
       }),
     ],
     [statusMessage, debugLogs]
   );
-
+  
+  // Image preloading
+  const imageCache = useRef<Map<string, HTMLImageElement>>(new Map());
+  
+  const loadImage = useCallback(async (url: string): Promise<HTMLImageElement | null> => {
+    if (imageCache.current.has(url)) {
+      return imageCache.current.get(url) ?? null;
+    }
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        imageCache.current.set(url, img);
+        resolve(img);
+      };
+      img.onerror = () => resolve(null);
+      img.src = url;
+    });
+  }, []);
+  
+  // Create card textures for GPU rendering
+  const createCardTextures = useCallback((): CardTexture[] => {
+    const dpr = window.devicePixelRatio || 1;
+    return CARD_DATA.map((card, index) => {
+      const canvasEl = document.createElement('canvas');
+      canvasEl.width = Math.floor(CONFIG.cardWidth * dpr);
+      canvasEl.height = Math.floor(CONFIG.cardHeight * dpr);
+      const ctx = canvasEl.getContext('2d');
+      if (!ctx) {
+        return { id: card.id, width: canvasEl.width, height: canvasEl.height, source: canvasEl };
+      }
+      
+      ctx.scale(dpr, dpr);
+      ctx.textBaseline = 'top';
+      
+      const img = imageCache.current.get(card.image);
+      if (img) {
+        const imgRatio = img.width / img.height;
+        const cardRatio = CONFIG.cardWidth / CONFIG.cardHeight;
+        let drawWidth = CONFIG.cardWidth, drawHeight = CONFIG.cardHeight, drawX = 0, drawY = 0;
+        
+        if (imgRatio > cardRatio) {
+          drawHeight = CONFIG.cardHeight;
+          drawWidth = drawHeight * imgRatio;
+          drawX = -(drawWidth - CONFIG.cardWidth) / 2;
+        } else {
+          drawWidth = CONFIG.cardWidth;
+          drawHeight = drawWidth / imgRatio;
+          drawY = -(drawHeight - CONFIG.cardHeight) / 2;
+        }
+        
+        ctx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        ctx.fillRect(0, 0, CONFIG.cardWidth, CONFIG.cardHeight);
+      } else {
+        const theme = CARD_THEMES[index % CARD_THEMES.length];
+        const gradient = ctx.createLinearGradient(0, 0, CONFIG.cardWidth, CONFIG.cardHeight);
+        gradient.addColorStop(0, theme.primary);
+        gradient.addColorStop(1, theme.secondary);
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, CONFIG.cardWidth, CONFIG.cardHeight);
+      }
+      
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+      ctx.font = '600 18px Inter, system-ui, sans-serif';
+      ctx.fillText(card.title, 14, CONFIG.cardHeight - 50);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+      ctx.font = '13px Inter, system-ui, sans-serif';
+      ctx.fillText(card.subtitle, 14, CONFIG.cardHeight - 30);
+      
+      return { id: card.id, width: canvasEl.width, height: canvasEl.height, source: canvasEl };
+    });
+  }, []);
+  
+  // GPU initialization
   useEffect(() => {
     const canvas = canvasRef.current;
-    const track = trackRef.current;
     const mirrorRoot = mirrorRef.current;
-    const fallback = fallbackRef.current;
     const root = rootRef.current;
-    if (!canvas || !track || !mirrorRoot || !fallback || !root) return;
-
-    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const imageCache = new Map<string, HTMLImageElement>();
-
-    const state = {
-      offset: 0,
-      velocity: 0,
-      isDragging: false,
-      hoveredId: null as string | null,
-      centerId: null as string | null,
-      expandedId: null as string | null,
-      expandProgress: 0,
-      expandTarget: 0,
-      dragBendTarget: 0,
-      bend: 0,
-      cardPop: new Map<string, number>(),
-      // Ripple effect state per card
-      ripples: new Map<string, { originX: number; originY: number; progress: number }>(),
-      // Scroll ripple state (global, world-space)
-      scrollRippleOriginX: 0,
-      scrollRippleIntensity: 0,
-      scrollRippleDirection: 0,
-      scrollRipplePeak: 0,        // Peak intensity for easeOutExpo decay
-      scrollRippleDecayT: 0,      // Decay progress (0 = peak, 1 = done)
-      lastDragX: 0,  // Track drag position for direction
-      // Wheel inertia state
-      lastWheelTime: 0,
-      wheelDecayActive: false,
-      wheelDecayStartTime: 0,
-      wheelInitialVelocity: 0,
-    };
-
-    const config = {
-      cardSpacing: 320,
-      popZ: 0,
-      cardWidth: 300,
-      cardHeight: 420,
-      dragSensitivity: 1,
-      wheelSensitivity: 1,
-      velocitySensitivity: 1,
-      bendScale: 3.0,
-      bendClamp: 1.2,
-      dragBendScale: 0.35,
-    };
-
-    const rendererConfig = { cameraZ: 1200 };
-
-    const cardMap = new Map(CARD_DATA.map((card) => [card.id, card]));
-    const cardElements = CARD_DATA.map((card) => cardRefs.current.get(card.id)).filter(
-      (el): el is HTMLElement => el !== undefined
-    );
-    const cardBodyMap = bodyRefs.current;
-
-    let cardTextures: CardTexture[] = createCardTextures();
-    const registry = new SurfaceRegistry();
-    const layoutTracker = new LayoutTracker(registry);
-    const surfaceMap = new Map<string, Surface>();
-
-    cardElements.forEach((cardEl) => {
-      const surfaceId = cardEl.dataset.surfaceId ?? '';
-      const surface = new Surface(surfaceId, cardEl);
-      registry.add(surface);
-      surfaceMap.set(surfaceId, surface);
-    });
-
-    layoutTracker.start();
-
-    const engine = new Engine({
-      canvas,
-      mode: InteractionMode.CANVAS_INTERACTIVE,
-      trackFPS: true,
-    });
-
-    const input = new InputManager(engine, {
-      target: canvas,
-      registry: {
-        all: () => registry.regular(),
-      },
-      inertiaOptions: {
-        friction: prefersReducedMotion ? 0.75 : 0.92,
-        minVelocity: prefersReducedMotion ? 0.3 : 0.15,
-      },
-    });
-    input.initialize(canvas);
-
-    const a11y = new A11yManager(engine, {
-      registry,
-      container: mirrorRoot,
-      navigationAxis: 'horizontal',
-      wrapNavigation: true,
-      skipGhosts: true,
-    });
-
-    CARD_DATA.forEach((card) => {
-      a11y.configure(card.id, {
-        label: card.title,
-        description: card.subtitle,
-      });
-    });
-
-    const transitionCoordinator = new TransitionCoordinator(engine, {
-      surfaceRegistry: registry,
-      defaultTimeoutMs: 5000,
-    });
-
-    const gpu = {
-      context: new WebGPUContext(),
-      shaderLibrary: null as ShaderLibrary | null,
-      carousel: null as CarouselRenderer | null,
-      ready: false,
-      textures: {
-        carousel: null as GPUTexture | null,
-        detail: null as GPUTexture | null,
-      },
-    };
-
-    const getScrollLimits = (): { minOffset: number; maxOffset: number } => {
-      const cardCount = CARD_DATA.length;
-      const midIndex = (cardCount - 1) / 2;
-      const maxOffset = midIndex * config.cardSpacing;
-      const minOffset = -midIndex * config.cardSpacing;
-      return { minOffset, maxOffset };
-    };
-
-    const clamp = (value: number, min: number, max: number): number => {
-      return Math.max(min, Math.min(max, value));
-    };
-
-    const clampOffset = (offset: number): number => {
-      const { minOffset, maxOffset } = getScrollLimits();
-      return clamp(offset, minOffset, maxOffset);
-    };
-
-    const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
+    if (!canvas || !mirrorRoot || !root) return;
     
-    // EaseOutExpo: starts fast, decelerates smoothly to a gentle stop
-    const easeOutExpo = (t: number): number => t >= 1 ? 1 : 1 - Math.pow(2, -10 * t);
-
-    const setStatus = (message: string): void => {
-      setStatusMessage(message);
-    };
-
-    const setHoverState = (surfaceId: string, isHovered: boolean): void => {
-      const cardEl = cardElements.find((el) => el.dataset.surfaceId === surfaceId);
-      if (!cardEl) return;
-      cardEl.style.outline = isHovered ? '1px solid hsl(var(--foreground))' : 'none';
-      cardEl.style.outlineOffset = '2px';
-    };
-
-    const updateGhostDom = (cardEl: HTMLElement, x: number, z: number): void => {
-      const cameraZ = rendererConfig.cameraZ;
-      const perspective = cameraZ / (cameraZ - z);
-      const projectedX = x * perspective;
-      const scale = perspective;
-      cardEl.style.transform = `translate(-50%, -50%) translate(${projectedX}px, 0px) scale(${scale})`;
-      cardEl.style.zIndex = String(Math.round(z));
-    };
-
-    const applyDomTransforms = (): void => {
-      const cardCount = cardElements.length;
-      const midIndex = (cardCount - 1) / 2;
-
-      const frame = cardElements.map((cardEl, index) => {
-        const baseX = (index - midIndex) * config.cardSpacing;
-        const x = baseX + state.offset;
-        const distance = Math.abs(x);
-        return { cardEl, x, distance };
-      });
-
-      const closest = frame.reduce(
-        (best, entry) => (entry.distance < best.distance ? entry : best),
-        frame[0]
-      );
-
-      frame.forEach(({ cardEl, x }) => {
-        const isCenter = cardEl === closest.cardEl;
-        const popZ = isCenter ? config.popZ : 0;
-        cardEl.style.transform = `translate(-50%, -50%) translate3d(${x}px, 0px, ${popZ}px)`;
-        cardEl.style.zIndex = String(Math.round(popZ));
-        const surface = surfaceMap.get(cardEl.dataset.surfaceId ?? '');
-        if (surface) {
-          surface.zIndex = Math.round(popZ);
-        }
-      });
-
-      if (closest?.cardEl?.dataset?.surfaceId) {
-        const closestId = closest.cardEl.dataset.surfaceId;
-        if (closestId !== state.centerId) {
-          state.centerId = closestId;
-          const card = cardMap.get(closestId);
-          setCenterTitle(card ? card.title : '--');
-        }
-      }
-
-      layoutTracker.forceUpdate();
-    };
-
-    const applyCarouselTransforms = (): void => {
-      if (!gpu.ready || !gpu.carousel) {
-        applyDomTransforms();
-        return;
-      }
-
-      const cardCount = cardElements.length;
-      const midIndex = (cardCount - 1) / 2;
-      const bendBase = state.bend;
-
-      const frame = cardElements.map((cardEl, index) => {
-        const baseX = (index - midIndex) * config.cardSpacing;
-        const x = baseX + state.offset;
-        const distance = Math.abs(x);
-        return { cardEl, x, distance };
-      });
-
-      const closest = frame.reduce(
-        (best, entry) => (entry.distance < best.distance ? entry : best),
-        frame[0]
-      );
-
-      const expandProgress = state.expandProgress;
-      const expandedId = state.expandedId;
-
-      const cardStates: CardState[] = frame.map(({ cardEl, x, distance }) => {
-        const cardId = cardEl.dataset.surfaceId ?? '';
-        const isCenter = cardEl === closest.cardEl;
-        const isExpanded = cardId === expandedId;
-
-        const targetPop = isCenter && !expandedId ? config.popZ : 0;
-        const currentPop = state.cardPop.get(cardId) ?? 0;
-        const smoothPop = lerp(currentPop, targetPop, 0.12);
-        state.cardPop.set(cardId, smoothPop);
-
-        let finalX = x;
-        let finalZ = smoothPop;
-        let scale = 1;
-        let opacity = 1;
-
-        if (expandProgress > 0) {
-          if (isExpanded) {
-            scale = 1 + expandProgress * 0.6;
-            finalZ = smoothPop + expandProgress * 300;
-            finalX = lerp(x, 0, expandProgress);
-          } else {
-            opacity = 1 - expandProgress * 0.85;
-            finalZ = smoothPop - expandProgress * 100;
-          }
-        }
-
-        // Subtle per-card rotation based on bend (uniform fabric effect is handled globally)
-        const rotationY = -bendBase * 0.08 * (1 - expandProgress);
-        
-        // Slight speed shift for parallax effect during drag
-        const speedShift = bendBase * 30 * (1 - expandProgress);
-        finalX += speedShift;
-
-        updateGhostDom(cardEl, finalX, finalZ);
-
-        const body = cardBodyMap.get(cardId);
-        if (body) {
-          const isVisible = isExpanded && expandProgress > 0.5;
-          body.style.maxHeight = isVisible ? '200px' : '0px';
-          body.style.opacity = isVisible ? '1' : '0';
-        }
-
-        const surface = surfaceMap.get(cardId);
-        if (surface) {
-          surface.zIndex = Math.round(finalZ);
-        }
-
-        // Get ripple state for this card
-        const ripple = state.ripples.get(cardId);
-
-        return {
-          id: cardId,
-          x: finalX,
-          y: 0,
-          z: finalZ,
-          rotationY,
-          width: config.cardWidth * scale,
-          height: config.cardHeight * scale,
-          bend: 0, // Per-card bend is 0; uniform fabric effect uses globalBend
-          opacity,
-          rippleOrigin: ripple ? { x: ripple.originX, y: ripple.originY } : undefined,
-          rippleProgress: ripple?.progress ?? 0,
-        };
-      });
-
-      if (closest?.cardEl?.dataset?.surfaceId) {
-        const closestId = closest.cardEl.dataset.surfaceId;
-        if (closestId !== state.centerId) {
-          state.centerId = closestId;
-          const card = cardMap.get(closestId);
-          setCenterTitle(card ? card.title : '--');
-        }
-      }
-
-      const sorted = [...cardStates].sort((a, b) => a.z - b.z);
-      gpu.carousel.updateCards(sorted);
-      layoutTracker.forceUpdate();
-    };
-
-    const snapToCard = (surfaceId: string): void => {
-      const cardIndex = cardElements.findIndex((el) => el.dataset.surfaceId === surfaceId);
-      if (cardIndex === -1) return;
-      const midIndex = (cardElements.length - 1) / 2;
-      const targetOffset = -(cardIndex - midIndex) * config.cardSpacing;
-      state.offset = targetOffset;
-      state.velocity = 0;
-      applyCarouselTransforms();
-    };
-
-    const activateCard = (surfaceId: string): void => {
-      if (state.expandedId === surfaceId) {
-        state.expandedId = null;
-        state.expandTarget = 0;
-        return;
-      }
-
-      snapToCard(surfaceId);
-      state.expandedId = surfaceId;
-      state.expandTarget = 1;
-    };
-
-    const triggerRipple = (surfaceId: string, normalizedX: number, normalizedY: number): void => {
-      state.ripples.set(surfaceId, {
-        originX: normalizedX,
-        originY: normalizedY,
-        progress: 0.001, // Start just above 0 to trigger animation
-      });
-    };
-
-    const loadImage = async (url: string): Promise<HTMLImageElement | null> => {
-      if (imageCache.has(url)) {
-        return imageCache.get(url) ?? null;
-      }
-
-      return new Promise((resolve) => {
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.onload = () => {
-          imageCache.set(url, img);
-          resolve(img);
-        };
-        img.onerror = () => resolve(null);
-        img.src = url;
-      });
-    };
-
-    const preloadImages = async (): Promise<void> => {
+    const gpu = gpuRef.current;
+    let a11yManager: A11yManager | null = null;
+    
+    const initializeGPU = async () => {
+      setStatusMessage('Loading images...');
       await Promise.all(CARD_DATA.map((card) => loadImage(card.image)));
-    };
-
-    function createCardTextures(): CardTexture[] {
-      const dpr = window.devicePixelRatio || 1;
-      return CARD_DATA.map((card, index) => {
-        const canvasEl = document.createElement('canvas');
-        canvasEl.width = Math.floor(config.cardWidth * dpr);
-        canvasEl.height = Math.floor(config.cardHeight * dpr);
-        const ctx = canvasEl.getContext('2d');
-        if (!ctx) {
-          return {
-            id: card.id,
-            width: canvasEl.width,
-            height: canvasEl.height,
-            source: canvasEl,
-          };
-        }
-
-        ctx.scale(dpr, dpr);
-        ctx.textBaseline = 'top';
-
-        const img = imageCache.get(card.image);
-        if (img) {
-          const imgRatio = img.width / img.height;
-          const cardRatio = config.cardWidth / config.cardHeight;
-          let drawWidth = config.cardWidth;
-          let drawHeight = config.cardHeight;
-          let drawX = 0;
-          let drawY = 0;
-
-          if (imgRatio > cardRatio) {
-            drawHeight = config.cardHeight;
-            drawWidth = drawHeight * imgRatio;
-            drawX = -(drawWidth - config.cardWidth) / 2;
-          } else {
-            drawWidth = config.cardWidth;
-            drawHeight = drawWidth / imgRatio;
-            drawY = -(drawHeight - config.cardHeight) / 2;
-          }
-
-          ctx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-          ctx.fillRect(0, 0, config.cardWidth, config.cardHeight);
-        } else {
-          const theme = CARD_THEMES[index % CARD_THEMES.length];
-          const gradient = ctx.createLinearGradient(0, 0, config.cardWidth, config.cardHeight);
-          gradient.addColorStop(0, theme.primary);
-          gradient.addColorStop(1, theme.secondary);
-          ctx.fillStyle = gradient;
-          ctx.fillRect(0, 0, config.cardWidth, config.cardHeight);
-        }
-
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-        ctx.font = '600 18px Inter, system-ui, sans-serif';
-        ctx.fillText(card.title, 14, config.cardHeight - 50);
-
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-        ctx.font = '13px Inter, system-ui, sans-serif';
-        ctx.fillText(card.subtitle, 14, config.cardHeight - 30);
-
-        return {
-          id: card.id,
-          width: canvasEl.width,
-          height: canvasEl.height,
-          source: canvasEl,
-        };
-      });
-    }
-
-    const initializeGPU = async (): Promise<void> => {
-      setStatus('Loading images...');
-      await preloadImages();
-
-      // Capture WebGPU logs for on-screen display
+      
+      // Capture WebGPU logs
       const logs: string[] = [];
       const originalInfo = console.info;
-      const originalWarn = console.warn;
-      const originalError = console.error;
-      
       console.info = (...args: unknown[]) => {
         const msg = args.map(a => String(a)).join(' ');
         if (msg.includes('[WebGPU]')) {
@@ -567,53 +382,26 @@ function CarouselDemo() {
         }
         originalInfo.apply(console, args);
       };
-      console.warn = (...args: unknown[]) => {
-        const msg = args.map(a => String(a)).join(' ');
-        if (msg.includes('[WebGPU]')) {
-          logs.push(msg.replace('[WebGPU] ', ''));
-          setDebugLogs([...logs]);
-        }
-        originalWarn.apply(console, args);
-      };
-      console.error = (...args: unknown[]) => {
-        const msg = args.map(a => String(a)).join(' ');
-        if (msg.includes('[WebGPU]')) {
-          logs.push(msg.replace('[WebGPU] ', ''));
-          setDebugLogs([...logs]);
-        }
-        originalError.apply(console, args);
-      };
-
+      
       const initialized = await gpu.context.initialize({
         canvas,
         powerPreference: 'high-performance',
         alphaMode: 'premultiplied',
       });
       
-      // Restore original console methods
       console.info = originalInfo;
-      console.warn = originalWarn;
-      console.error = originalError;
-
-      if (!initialized) {
-        // Get detailed support info for better user messaging
+      
+      if (!initialized || !gpu.context.device) {
         const browserInfo = gpu.context.browserInfo;
-        
         let message = 'WebGPU unavailable. Running in DOM-only mode.';
         if (browserInfo.isIOSSafari) {
           if (browserInfo.iosVersion && browserInfo.iosVersion.major < 17) {
-            message = `iOS ${browserInfo.iosVersion.major} doesn't support WebGPU. Update to iOS 17+ for GPU effects.`;
+            message = `iOS ${browserInfo.iosVersion.major} doesn't support WebGPU.`;
           } else if (browserInfo.iosVersion && browserInfo.iosVersion.major === 17 && browserInfo.iosVersion.minor < 4) {
-            message = `WebGPU disabled. Enable in Settings → Safari → Advanced → Feature Flags → WebGPU`;
-          } else if (!navigator.gpu) {
-            // iOS 17.4+ but navigator.gpu missing - likely Lockdown Mode or Private Browsing
-            message = `WebGPU blocked. Check: Lockdown Mode off? Not in Private Browsing? Feature Flags → WebGPU on?`;
-          } else {
-            message = `WebGPU adapter unavailable. Try restarting Safari.`;
+            message = `WebGPU disabled. Enable in Settings → Safari → Advanced → Feature Flags`;
           }
         }
-        
-        setStatus(message);
+        setStatusMessage(message);
         gpu.ready = false;
         setGpuReady(false);
         engine.mode = InteractionMode.DOM_INTERACTIVE;
@@ -621,359 +409,238 @@ function CarouselDemo() {
         root.classList.add('dom-fallback');
         return;
       }
-
-      if (!gpu.context.device) {
-        setStatus('GPU device unavailable');
-        return;
-      }
-
+      
       gpu.shaderLibrary = new ShaderLibrary();
       gpu.shaderLibrary.setDevice(gpu.context.device);
       gpu.shaderLibrary.registerDefaults();
       registerTransitionShaders(gpu.shaderLibrary);
-
-      gpu.carousel = new CarouselRenderer(gpu.context, gpu.shaderLibrary, {
-        cameraZ: rendererConfig.cameraZ,
-      });
+      
+      gpu.carousel = new CarouselRenderer(gpu.context, gpu.shaderLibrary, { cameraZ: CONFIG.cameraZ });
       gpu.carousel.initialize();
-
-      cardTextures = createCardTextures();
-      gpu.carousel.setCards(cardTextures);
+      
+      const textures = createCardTextures();
+      gpu.carousel.setCards(textures);
       gpu.ready = true;
       setGpuReady(true);
-      // Use logical (CSS) pixels for viewport to match DOM/mirror coordinate system
-      const initRect = canvas.getBoundingClientRect();
-      gpu.carousel.setViewport(initRect.width || window.innerWidth, initRect.height || window.innerHeight);
-      setStatus('Ready. Click a card to expand.');
+      
+      const rect = canvas.getBoundingClientRect();
+      gpu.carousel.setViewport(rect.width || window.innerWidth, rect.height || window.innerHeight);
+      setStatusMessage('Ready. Click a card to expand.');
       canvas.style.opacity = '1';
       root.classList.remove('dom-fallback');
     };
-
-    const resizeCanvas = (): void => {
+    
+    // Set up A11y
+    a11yManager = new A11yManager(engine, {
+      registry,
+      container: mirrorRoot,
+      navigationAxis: 'horizontal',
+      wrapNavigation: true,
+      skipGhosts: true,
+    });
+    CARD_DATA.forEach((card) => {
+      a11yManager!.configure(card.id, { label: card.title, description: card.subtitle });
+    });
+    
+    // Note: Input handling is done via useCarouselPointerEvents hook
+    // which is spread onto the canvas as {...pointerEvents}
+    
+    // Resize handling
+    const resizeCanvas = () => {
       const rect = canvas.getBoundingClientRect();
-      // Fallback to window dimensions if rect is empty
       const width = rect.width || window.innerWidth;
       const height = rect.height || window.innerHeight;
       if (width === 0 || height === 0) return;
       
       const dpr = window.devicePixelRatio || 1;
-      const scaledWidth = Math.floor(width * dpr);
-      const scaledHeight = Math.floor(height * dpr);
-      
-      // Canvas dimensions use physical pixels for rendering resolution
-      if (canvas.width !== scaledWidth || canvas.height !== scaledHeight) {
-        canvas.width = scaledWidth;
-        canvas.height = scaledHeight;
-      }
+      canvas.width = Math.floor(width * dpr);
+      canvas.height = Math.floor(height * dpr);
       
       if (gpu.ready && gpu.carousel) {
         gpu.context.resize(width, height, dpr);
-        cardTextures = createCardTextures();
-        gpu.carousel.setCards(cardTextures);
-        // Use logical (CSS) pixels for viewport to match DOM/mirror coordinate system
+        const textures = createCardTextures();
+        gpu.carousel.setCards(textures);
         gpu.carousel.setViewport(width, height);
       }
     };
-
-    const wheelDecayDuration = prefersReducedMotion ? 400 : 800;  // ms
     
-    const handleWheel = (event: WheelEvent): void => {
-      if (state.expandedId) {
-        state.expandedId = null;
-        state.expandTarget = 0;
-        return;
-      }
-      event.preventDefault();
-      
-      // Stop any active wheel decay when user resumes wheeling
-      state.wheelDecayActive = false;
-      
-      const delta = -event.deltaY * 0.025;
-      state.offset = clampOffset(state.offset + delta);
-      
-      // Set velocity for bend effect (same as drag)
-      state.velocity = delta * 10;
-      state.lastWheelTime = performance.now();
-
-      // Trigger scroll ripple on wheel to match drag feedback
-      const wheelSpeed = Math.abs(delta);
-      const normalizedSpeed = Math.min(Math.pow(wheelSpeed, 0.75) * 0.8, 0.9);
-      if (normalizedSpeed > state.scrollRippleIntensity) {
-        state.scrollRippleIntensity = normalizedSpeed;
-        state.scrollRipplePeak = normalizedSpeed;
-        state.scrollRippleDecayT = 0;
-      }
-      state.scrollRippleDirection = delta > 0 ? 1 : delta < 0 ? -1 : state.scrollRippleDirection;
-      
-      applyCarouselTransforms();
-    };
-
-    const handleKeydown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape' && state.expandedId) {
-        state.expandedId = null;
-        state.expandTarget = 0;
+    const handleKeydown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && carouselRef.current?.hasExpanded) {
+        carouselRef.current.collapseItem();
       }
     };
-
-    const handleResize = (): void => {
-      resizeCanvas();
-      layoutTracker.forceUpdate();
+    
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      carouselRef.current?.handleWheel(e.deltaY);
     };
-
-    input.onIntent('dragStart', ({ x }) => {
-      state.isDragging = true;
-      state.velocity = 0;
-      state.dragBendTarget = 0;
+    
+    // Animation loop
+    const easeOutExpo = (t: number): number => t >= 1 ? 1 : 1 - Math.pow(2, -10 * t);
+    const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
+    const clamp = (v: number, min: number, max: number): number => Math.max(min, Math.min(max, v));
+    
+    const unsubRender = engine.events.on('render', ({ deltaTime }: { deltaTime: number }) => {
+      const anim = animStateRef.current;
+      const currentCarousel = carouselRef.current;
+      if (!currentCarousel) return;
       
-      // Convert screen X to world X for scroll ripple origin
-      // The canvas is centered, so screen center = world 0
-      const rect = canvas.getBoundingClientRect();
-      const screenCenterX = rect.width / 2;
-      const worldX = (x - screenCenterX) - state.offset;  // Account for current scroll
-      state.scrollRippleOriginX = worldX;
-      state.lastDragX = x;
-    });
-
-    input.onIntent('drag', ({ deltaX }) => {
-      state.offset = clampOffset(state.offset + deltaX * config.dragSensitivity);
-      state.velocity = 0;
-      state.dragBendTarget = clamp(
-        deltaX * config.dragBendScale,
-        -config.bendClamp,
-        config.bendClamp
-      );
+      // Use live expandProgress from controller (not React state which lags)
+      const expandProgress = currentCarousel.carousel.expandProgress;
       
-      // Update scroll ripple intensity based on drag speed (very gentle)
-      const dragSpeed = Math.abs(deltaX);
-      const normalizedSpeed = Math.min(dragSpeed / 60, 0.4);  // Max 0.4, gentle ramp
-      if (normalizedSpeed > state.scrollRippleIntensity) {
-        state.scrollRippleIntensity = normalizedSpeed;
-        state.scrollRipplePeak = normalizedSpeed;
-        state.scrollRippleDecayT = 0;  // Reset decay
-      }
-      
-      // Track direction (positive = dragging right = scrolling left)
-      state.scrollRippleDirection = deltaX > 0 ? 1 : deltaX < 0 ? -1 : state.scrollRippleDirection;
-      state.lastDragX += deltaX;  // Track cumulative position
-      
-      applyCarouselTransforms();
-    });
-
-    input.onIntent('dragEnd', () => {
-      state.isDragging = false;
-      state.dragBendTarget = 0;
-    });
-
-    input.onIntent('hoverEnter', ({ surfaceId }) => {
-      state.hoveredId = surfaceId;
-      setHoverState(surfaceId, true);
-    });
-
-    input.onIntent('hoverLeave', ({ surfaceId }) => {
-      setHoverState(surfaceId, false);
-      if (state.hoveredId === surfaceId) {
-        state.hoveredId = null;
-      }
-    });
-
-    input.onIntent('tap', ({ surfaceId, x, y }) => {
-      if (!surfaceId) return;
-      
-      // Trigger ripple effect at click position
-      const surface = surfaceMap.get(surfaceId);
-      if (surface) {
-        const rect = surface.rect;
-        // Calculate normalized coordinates (0-1) within the card
-        const normalizedX = Math.max(0, Math.min(1, (x - rect.x) / rect.width));
-        const normalizedY = Math.max(0, Math.min(1, (y - rect.y) / rect.height));
-        triggerRipple(surfaceId, normalizedX, normalizedY);
-      }
-      
-      activateCard(surfaceId);
-    });
-
-    input.onIntent('inertia', (inertiaState) => {
-      if (state.isDragging) return;
-      state.velocity = inertiaState.isActive
-        ? inertiaState.velocityX * config.velocitySensitivity
-        : 0;
-      
-      // Gentle scroll ripple during inertia
-      if (inertiaState.isActive && Math.abs(inertiaState.velocityX) > 10) {
-        const inertiaSpeed = Math.abs(inertiaState.velocityX);
-        const normalizedSpeed = Math.min(inertiaSpeed / 1200, 0.3);  // Cap at 0.3 for inertia
-        if (normalizedSpeed > state.scrollRippleIntensity) {
-          state.scrollRippleIntensity = normalizedSpeed;
-          state.scrollRipplePeak = normalizedSpeed;
-          state.scrollRippleDecayT = 0;  // Reset decay
-        }
-        state.scrollRippleDirection = inertiaState.velocityX > 0 ? 1 : -1;
-      }
-    });
-
-    const unsubRender = engine.events.on('render', ({ deltaTime }) => {
-      const targetBend = state.expandedId
+      // Calculate target bend from velocity (use live controller values)
+      const controller = currentCarousel.carousel;
+      const targetBend = controller.hasExpanded
         ? 0
-        : state.isDragging
-          ? state.dragBendTarget
-          : clamp(state.velocity * config.bendScale * 0.01, -config.bendClamp, config.bendClamp);
-
-      const distance = Math.abs(state.bend - targetBend);
-      const maxDistance = config.bendClamp;
-      const t = Math.min(distance / maxDistance, 1);
-      const easedT = Math.pow(t, 0.25);
+        : clamp(controller.velocity * CONFIG.bendScale * 0.00001, -CONFIG.bendClamp, CONFIG.bendClamp);
+      
+      // Smooth bend
+      const distance = Math.abs(anim.bend - targetBend);
+      const t = Math.min(distance / CONFIG.bendClamp, 1);
       const baseFactor = prefersReducedMotion ? 0.12 : 0.1;
-      const tailFactor = 0.008;
-      const lerpFactor = tailFactor + (baseFactor - tailFactor) * easedT;
-
-      state.bend = lerp(state.bend, targetBend, lerpFactor);
-      if (Math.abs(state.bend) < 0.0003) state.bend = 0;
-
-      // Decay scroll ripple intensity with easeOutExpo
-      if (state.scrollRipplePeak > 0 && state.scrollRippleDecayT < 1) {
-        // Advance decay progress based on time
-        const decaySpeed = prefersReducedMotion ? 0.0012 : 0.0006;  // Speed of decay (per ms)
-        state.scrollRippleDecayT = Math.min(1, state.scrollRippleDecayT + deltaTime * decaySpeed);
-        
-        const rippleEase = easeOutExpo(state.scrollRippleDecayT);
-        state.scrollRippleIntensity = state.scrollRipplePeak * (1 - rippleEase);
-        
-        if (state.scrollRippleIntensity < 0.001) {
-          state.scrollRippleIntensity = 0;
-          state.scrollRipplePeak = 0;
+      const lerpFactor = 0.008 + (baseFactor - 0.008) * Math.pow(t, 0.25);
+      anim.bend = lerp(anim.bend, targetBend, lerpFactor);
+      if (Math.abs(anim.bend) < 0.0003) anim.bend = 0;
+      
+      // Decay scroll ripple
+      if (anim.scrollRipplePeak > 0 && anim.scrollRippleDecayT < 1) {
+        const decaySpeed = prefersReducedMotion ? 0.0012 : 0.0006;
+        anim.scrollRippleDecayT = Math.min(1, anim.scrollRippleDecayT + deltaTime * decaySpeed);
+        anim.scrollRippleIntensity = anim.scrollRipplePeak * (1 - easeOutExpo(anim.scrollRippleDecayT));
+        if (anim.scrollRippleIntensity < 0.001) {
+          anim.scrollRippleIntensity = 0;
+          anim.scrollRipplePeak = 0;
         }
       }
       
-      // Update global state for uniform fabric effect
+      // Animate ripples
+      const rippleSpeed = prefersReducedMotion ? 0.7 : 0.5;
+      for (const [cardId, ripple] of anim.ripples) {
+        ripple.progress += deltaTime * rippleSpeed * 0.001;
+        if (ripple.progress >= 1) anim.ripples.delete(cardId);
+      }
+      
+      // Update GPU state and render
+      const gpu = gpuRef.current;
       if (gpu.ready && gpu.carousel) {
         gpu.carousel.setGlobalState({
-          globalBend: state.bend,
-          wavePhaseOffset: state.offset * 0.001, // Phase offset based on scroll position
-          scrollRippleOriginX: state.scrollRippleOriginX,
-          scrollRippleIntensity: state.scrollRippleIntensity,
-          scrollRippleDirection: state.scrollRippleDirection,
+          globalBend: anim.bend,
+          wavePhaseOffset: controller.offset * 0.001,
+          scrollRippleOriginX: anim.scrollRippleOriginX,
+          scrollRippleIntensity: anim.scrollRippleIntensity,
+          scrollRippleDirection: anim.scrollRippleDirection,
         });
-      }
-
-      const expandLerp = prefersReducedMotion ? 0.15 : 0.1;
-      state.expandProgress = lerp(state.expandProgress, state.expandTarget, expandLerp);
-      if (Math.abs(state.expandProgress - state.expandTarget) < 0.001) {
-        state.expandProgress = state.expandTarget;
-      }
-
-      // Apply velocity from drag inertia
-      if (!state.isDragging && !state.expandedId && Math.abs(state.velocity) > 0.1) {
-        const newOffset = clampOffset(state.offset + state.velocity * deltaTime);
-        if (newOffset === state.offset) {
-          state.velocity = 0;
-        }
-        state.offset = newOffset;
-      }
-      
-      // Wheel inertia with easeOutExpo decay
-      const now = performance.now();
-      const timeSinceWheel = now - state.lastWheelTime;
-      
-      // Start decay after 80ms of no wheel events
-      if (timeSinceWheel > 80 && !state.wheelDecayActive && Math.abs(state.velocity) > 0.1 && !state.isDragging) {
-        state.wheelDecayActive = true;
-        state.wheelDecayStartTime = now;
-        state.wheelInitialVelocity = state.velocity;
-      }
-      
-      // Apply easeOutExpo decay
-      if (state.wheelDecayActive) {
-        const elapsed = now - state.wheelDecayStartTime;
-        const t = Math.min(elapsed / wheelDecayDuration, 1);
         
-        // Velocity decays as 2^(-10*t) - same as drag inertia
-        const velocityMultiplier = Math.pow(2, -10 * t);
-        state.velocity = state.wheelInitialVelocity * velocityMultiplier;
+        // Build card states for GPU
+        // Use live item states from controller
+        const cardStates = controller.computeItemStates().map((state: CarouselItemState) => {
+          const card = state.item.data as CardData;
+          const ripple = anim.ripples.get(card.id);
+          let finalX = state.x;
+          let finalZ = state.isCenter ? 0 : 0;
+          let opacity = 1;
+          let scale = 1;
+          
+          if (expandProgress > 0) {
+            if (state.isExpanded) {
+              scale = 1 + expandProgress * 0.6;
+              finalZ = expandProgress * 300;
+              finalX = lerp(state.x, 0, expandProgress);
+            } else {
+              opacity = 1 - expandProgress * 0.85;
+              finalZ = -expandProgress * 100;
+            }
+          }
+          
+          // Update DOM ghost position
+          const el = cardRefs.current.get(card.id);
+          if (el) {
+            const perspective = CONFIG.cameraZ / (CONFIG.cameraZ - finalZ);
+            const projectedX = finalX * perspective;
+            el.style.transform = `translate(-50%, -50%) translate(${projectedX}px, 0px) scale(${perspective})`;
+            el.style.zIndex = String(Math.round(finalZ));
+          }
+          
+          // Update body visibility
+          const body = bodyRefs.current.get(card.id);
+          if (body) {
+            const isVisible = state.isExpanded && expandProgress > 0.5;
+            body.style.maxHeight = isVisible ? '200px' : '0px';
+            body.style.opacity = isVisible ? '1' : '0';
+          }
+          
+          return {
+            id: card.id,
+            x: finalX,
+            y: 0,
+            z: finalZ,
+            rotationY: -anim.bend * 0.08 * (1 - expandProgress),
+            width: CONFIG.cardWidth * scale,
+            height: CONFIG.cardHeight * scale,
+            bend: 0,
+            opacity,
+            rippleOrigin: ripple ? { x: ripple.originX, y: ripple.originY } : undefined,
+            rippleProgress: ripple?.progress ?? 0,
+          };
+        }).sort((a: { z: number }, b: { z: number }) => a.z - b.z);
         
-        if (t >= 1 || Math.abs(state.velocity) < 0.1) {
-          state.wheelDecayActive = false;
-          state.velocity = 0;
-        }
-      }
-
-      // Animate fabric billow - 2 second duration
-      const rippleSpeed = prefersReducedMotion ? 0.7 : 0.5;
-      for (const [cardId, ripple] of state.ripples) {
-        ripple.progress += deltaTime * rippleSpeed * 0.001;
-        if (ripple.progress >= 1) {
-          state.ripples.delete(cardId);
-        }
-      }
-
-      applyCarouselTransforms();
-
-      if (gpu.ready && gpu.carousel) {
+        gpu.carousel.updateCards(cardStates);
         gpu.carousel.render([0, 0, 0, 0]);
       }
-    });
-
-    const unsubSelect = engine.events.on('a11y:select', ({ surfaceId }) => {
-      if (!surfaceId) return;
-      snapToCard(surfaceId);
-    });
-
-    const unsubActivate = engine.events.on('a11y:activate', ({ surfaceId }) => {
-      if (!surfaceId) return;
-      activateCard(surfaceId);
-    });
-
-    // Initialize GPU and set up rendering
-    initializeGPU().then(() => {
-      // Ensure viewport is set after GPU init completes
-      resizeCanvas();
-      applyCarouselTransforms();
+      
+      layoutTracker.forceUpdate();
     });
     
-    // Also do initial resize for DOM fallback case
+    // A11y events
+    const unsubSelect = engine.events.on('a11y:select', ({ surfaceId }: { surfaceId: string | null }) => {
+      if (surfaceId) carouselRef.current?.scrollToItem(surfaceId);
+    });
+    const unsubActivate = engine.events.on('a11y:activate', ({ surfaceId }: { surfaceId: string | null }) => {
+      if (surfaceId) {
+        const index = CARD_DATA.findIndex(c => c.id === surfaceId);
+        if (index >= 0) carouselRef.current?.expandItem(index);
+      }
+    });
+    
+    initializeGPU().then(resizeCanvas);
     resizeCanvas();
-    applyCarouselTransforms();
-
+    
     canvas.addEventListener('wheel', handleWheel, { passive: false });
     window.addEventListener('keydown', handleKeydown);
-    window.addEventListener('resize', handleResize);
-
+    window.addEventListener('resize', resizeCanvas);
+    
     return () => {
       canvas.removeEventListener('wheel', handleWheel);
       window.removeEventListener('keydown', handleKeydown);
-      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('resize', resizeCanvas);
       unsubRender();
       unsubSelect();
       unsubActivate();
-      layoutTracker.destroy();
-      registry.clear();
-      input.destroy();
-      a11y.destroy();
-      transitionCoordinator.destroy();
-      engine.destroy();
+      a11yManager?.destroy();
       gpu.carousel?.destroy();
       gpu.context.destroy();
     };
-  }, []);
-
+  // Note: carousel is accessed via carouselRef to avoid infinite re-initialization loops
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [engine, registry, layoutTracker, loadImage, createCardTextures, prefersReducedMotion]);
+  
   return (
     <div ref={rootRef} className="dark min-h-screen bg-black text-foreground overflow-hidden">
-      {/* Canvas layer - renders WebGPU content */}
+      {/* Canvas layer - z-5 to be above DOM cards but below UI */}
       <canvas
         ref={canvasRef}
-        className="fixed inset-0 h-full w-full touch-none z-0"
+        className="fixed inset-0 h-full w-full touch-none z-[5]"
         aria-hidden="true"
+        onClick={handleCanvasClick}
+        {...pointerEvents}
       />
       
-      {/* DOM cards track - hidden when WebGPU active, visible for fallback */}
+      {/* DOM cards track */}
       <div 
         className="fixed inset-0 flex items-center justify-center z-0 pointer-events-none"
         style={{ perspective: '1600px' }}
       >
-        <div
-          ref={trackRef}
-          className="relative w-full h-full"
-          style={{ transformStyle: 'preserve-3d' }}
-        >
+        <div ref={trackRef} className="relative w-full h-full" style={{ transformStyle: 'preserve-3d' }}>
           {CARD_DATA.map((card) => (
             <article
               key={card.id}
@@ -983,10 +650,7 @@ function CarouselDemo() {
               }}
               data-surface-id={card.id}
               className="absolute left-1/2 top-1/2 h-[420px] w-[300px] overflow-hidden bg-neutral-900 text-white"
-              style={{
-                opacity: gpuReady ? 0 : 1,
-                pointerEvents: gpuReady ? 'none' : 'auto',
-              }}
+              style={{ opacity: gpuReady ? 0 : 1, pointerEvents: gpuReady ? 'none' : 'auto' }}
               aria-hidden="true"
               role="presentation"
             >
@@ -1017,13 +681,11 @@ function CarouselDemo() {
       {/* A11y mirror layer */}
       <div ref={mirrorRef} className="fixed inset-0 z-10 pointer-events-none" />
       
-      {/* UI overlay - positioned above canvas but doesn't block interaction */}
+      {/* UI overlay */}
       <div className="fixed inset-x-0 top-0 z-20 pointer-events-none">
         <div className="mx-auto max-w-6xl px-6 py-6 pointer-events-auto">
           <header className="flex flex-col gap-2">
-            <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
-              Scene Demo
-            </p>
+            <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Scene Demo</p>
             <h1 className="text-2xl font-semibold">Scene 3D Carousel</h1>
             <p className="max-w-xl text-sm text-muted-foreground">
               Drag or scroll to browse. Click a card to expand. Press Escape or scroll to collapse.
@@ -1042,14 +704,6 @@ function CarouselDemo() {
         <span className="text-muted-foreground">Centered:</span>
         <span className="font-semibold text-foreground">{centerTitle}</span>
       </div>
-      
-      {/* Fallback overlay */}
-      <div
-        ref={fallbackRef}
-        className="fixed inset-0 z-30 bg-black opacity-0 transition-opacity pointer-events-none"
-        aria-hidden="true"
-      />
     </div>
   );
 }
-
