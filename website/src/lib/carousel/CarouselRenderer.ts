@@ -1,14 +1,17 @@
 /**
  * CarouselRenderer
  *
- * Renders a set of textured cards in a 3D arc using WebGPU.
- * Designed for the Phase 8 carousel demo.
+ * USER-LEVEL implementation showing how to build a custom 3D card carousel
+ * renderer using Scene's WebGPU primitives.
+ * 
+ * This demonstrates how users can create their own specialized renderers
+ * using @scene/renderer's WebGPUContext and ShaderLibrary.
  */
 
 /// <reference types="@webgpu/types" />
 
-import type { WebGPUContext } from './WebGPUContext';
-import type { ShaderLibrary } from './ShaderLibrary';
+import type { WebGPUContext } from '@scene/renderer';
+import type { ShaderLibrary } from '@scene/renderer';
 
 export interface CarouselCardTexture {
   id: string;
@@ -416,14 +419,16 @@ export class CarouselRenderer {
           let scrollIntensity = globals.scrollRippleIntensity;
           
           if (scrollIntensity > 0.001) {
-            // Very long wavelength - only 1-2 curls visible across entire carousel
-            // Use worldU (which includes scroll offset) so the wave moves with scroll
-            let wavelength = 2000.0;
-            let wavePhaseScroll = worldU * wavelength * 0.01;
+            // World-space wave creates unified fabric feel across all cards
+            let fabricPhase = worldU * 1.8 + globals.scrollRippleDirection * 0.4;
             
-            // Single gentle wave - uniform across all cards, moves with scroll
-            scrollRippleZ = sin(wavePhaseScroll) * scrollIntensity * 15.0;
+            // Primary fabric curl - smooth sine wave spanning multiple cards
+            let fabricCurl = sin(fabricPhase) * scrollIntensity * 45.0;
             
+            // Vertical drape variation for fabric depth
+            let drapeVar = (1.0 + 0.2 * sin(v * PI * 2.0));
+            
+            scrollRippleZ = fabricCurl * drapeVar;
             totalZ += scrollRippleZ;
           }
           
