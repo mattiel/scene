@@ -7,9 +7,7 @@ alwaysApply: true
 
 # Git Workflow Standards
 
-## ⚠️ CRITICAL: Never Commit Directly to Main
-
-**This is a non-negotiable rule that applies to all contributors, including AI assistants.**
+## Never Commit Directly to Main
 
 Before making ANY commits:
 1. Check current branch: `git branch --show-current`
@@ -17,7 +15,7 @@ Before making ANY commits:
 3. Only then proceed with commits
 
 ## Branch Strategy
-
+**Be on a branch or create one before making code changes** Never directly change codes in main
 **Always create a branch before making changes.** Never commit directly to `main`.
 
 ### Branch Naming

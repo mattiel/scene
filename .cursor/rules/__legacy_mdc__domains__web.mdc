@@ -1,0 +1,50 @@
+---
+description: "Web constraints for website package"
+alwaysApply: false
+---
+
+<!-- Source: domains/web/RULE.md -->
+
+# Web Domain
+
+`[rule: web]` — Constraints for website package.
+
+## Allowed Paths
+- `website/`
+
+## Scope
+- TanStack Start and router configuration
+- React components and pages
+- TailwindCSS styling
+- shadcn/ui components
+
+## Design Philosophy
+Minimal and elegant. Let content and functionality speak. Remove visual noise.
+
+## Rules
+
+### Routing & Architecture
+- Use file-based routing (`src/routes/`)
+- Import Scene packages from workspace
+- Canvas demos must handle WebGPU unavailability gracefully
+
+### Visual Design (Non-Negotiable)
+- Primary color: black (`#000`) for light mode, white (`#fff`) for dark mode
+- Grayscale: neutral (Tailwind `neutral-*` scale)
+- No visible borders: `border-*` classes must be `border-transparent` or `border-0`
+- Semantic dividers allowed but invisible (`border-transparent`, `opacity-0`, or no border style)
+- No decorative lines; use whitespace and typography hierarchy
+- No decorative colors; avoid gradients, decorative shadows, accent colors
+- No rounded corners on containers
+- Use spacing and font weight for hierarchy
+- Backgrounds: only `bg-white`, `bg-black`, or `bg-neutral-*` when needed for contrast
+
+### Exceptions (Require Justification)
+- Input fields may have subtle borders for affordance
+- Focus rings for accessibility are required
+- Canvas borders acceptable during WebGPU debugging only
+
+### Future Test/Demo Files
+- All new tests/demos for Scene packages must be in `website/`
+- Do not create standalone HTML files in `packages/*/tests/`
+- Create routes under `website/src/routes/demos/<package>/`
