@@ -286,6 +286,11 @@ export class Picking {
         pressure: 0,
         isPrimary: true,
         timestamp: performance.now(),
+        tiltX: 0,
+        tiltY: 0,
+        twist: 0,
+        width: 0,
+        height: 0,
       };
       const event: PickEvent = {
         hits: [],

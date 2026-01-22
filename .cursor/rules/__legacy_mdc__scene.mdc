@@ -16,6 +16,7 @@ You are working on **Scene**, a DOM-first cinematic effects engine for the web.
 3. **Motion controls time** - Scene does not own easing or timelines. Motion values drive transitions, progress, intensities.
 4. **Router-agnostic** - Scene never imports a router. Navigation is a host concern.
 5. **Primitives over implementations** - Library provides composable building blocks (Scrollable, Draggable, SceneValue), not specific implementations (carousels, sliders). Users compose primitives. Inspired by motion library.
+6. **Progressive enhancement** - Library evolves through real implementations. When demos reveal gaps, enhance primitives—don't work around them. See `@enhancement` rule.
 
 ## Key References
 
@@ -66,6 +67,7 @@ packages/
 | Surface tracking/DOM sync | `@surfaces` |
 | Pointer/picking/inertia | `@input` |
 | Accessibility/keyboard | `@a11y` |
+| Demo/implementation work | `@enhancement` |
 | Create/refine rules | `@ruler` |
 
 ## Graceful Degradation

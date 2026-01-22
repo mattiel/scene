@@ -78,6 +78,9 @@ export class LayoutTracker {
    * Start tracking all surfaces in the registry
    */
   start(): void {
+    if (typeof ResizeObserver !== 'function') {
+      return;
+    }
     // Clean restart instead of early return - allows re-initialization
     if (this._resizeObserver) {
       this.stop();
@@ -110,7 +113,7 @@ export class LayoutTracker {
     });
     
     // Create IntersectionObserver if visibility tracking is enabled
-    if (this._options.trackVisibility) {
+    if (this._options.trackVisibility && typeof IntersectionObserver === 'function') {
       this._intersectionObserver = new IntersectionObserver(
         (entries) => {
           for (const entry of entries) {

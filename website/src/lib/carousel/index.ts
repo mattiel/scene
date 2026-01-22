@@ -1,39 +1,45 @@
 /**
- * Carousel - User-level implementation
- * 
- * This folder contains a complete carousel implementation showing how to build
- * interactive 3D carousels using Scene's primitives:
- * 
- * - Carousel: Controller built on @scene/controllers Scrollable
- * - CarouselRenderer: WebGPU renderer using @scene/renderer primitives
- * - useCarousel: React hook for declarative carousel control
- * 
- * This is an EXAMPLE of what users can build with Scene, not a framework component.
+ * Carousel - 3D carousel implementation using Scene primitives
  */
 
-// Controller
+// Data and types
 export {
-  Carousel,
+  CARD_DATA,
+  CARD_THEMES,
+  BASE_CONFIG,
+  type CardData,
+  type CardTexture,
   type CarouselConfig,
-  type CarouselEvents,
-  type CarouselCallback,
-  type CarouselItem,
-  type CarouselItemState,
-} from './Carousel';
+} from './data';
 
-// Renderer
+// Utilities and hooks
 export {
-  CarouselRenderer,
-  type CarouselCardTexture,
-  type CarouselCardState,
-  type CarouselGlobalState,
-  type CarouselRendererOptions,
-} from './CarouselRenderer';
+  calculateSnapPoints,
+  calculateBounds,
+  findCenterIndex,
+  useResponsiveConfig,
+  lerp,
+  clamp,
+} from './utils';
 
-// React hook
+// Canvas texture rendering
+export { CardTextureRenderer, type CardTextureCache } from './CardTextureRenderer';
+
+// UI components
+export { LoadingOverlay, type LoadingOverlayProps } from './LoadingOverlay';
+
+// GPU rendering
 export {
-  useCarousel,
-  useCarouselPointerEvents,
-  type UseCarouselReturn,
-  type UseCarouselConfig,
-} from './useCarousel';
+  FabricWaveMaterial,
+  GLOBAL_UNIFORM_SCHEMA,
+  type FabricWaveMaterialConfig,
+} from './FabricWaveMaterial';
+
+export {
+  FabricWaveRenderer,
+  createFabricWaveRenderer,
+  type FabricCardTexture,
+  type FabricCardState,
+  type FabricGlobalState,
+  type FabricWaveRendererConfig,
+} from './FabricWaveRenderer';

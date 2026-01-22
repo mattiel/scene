@@ -7,6 +7,10 @@ export {
   wipeShader,
   fadeToBlackShader,
   zoomShader,
+  slideShader,
+  flipShader,
+  cubeShader,
+  morphShader,
   transitionShaders,
   registerTransitionShaders,
 } from './TransitionShaders';

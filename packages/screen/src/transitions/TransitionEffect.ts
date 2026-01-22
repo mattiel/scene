@@ -9,13 +9,27 @@
 
 import type { WebGPUContext, ShaderLibrary } from '@scene/renderer';
 
-export type TransitionType = 'dissolve' | 'wipe' | 'fade_to_black' | 'zoom';
+export type TransitionType = 
+  | 'dissolve' 
+  | 'wipe' 
+  | 'fade_to_black' 
+  | 'zoom'
+  | 'slide'
+  | 'flip'
+  | 'cube'
+  | 'morph';
 
 export type WipeDirection =
   | 'left-to-right'
   | 'right-to-left'
   | 'top-to-bottom'
   | 'bottom-to-top';
+
+export type SlideDirection = 'left' | 'right' | 'up' | 'down';
+
+export type FlipAxis = 'horizontal' | 'vertical';
+
+export type CubeDirection = 'left' | 'right';
 
 export interface TransitionConfig {
   type: TransitionType;
@@ -26,6 +40,16 @@ export interface TransitionConfig {
   wipeSoftness?: number;
   /** For zoom: zoom amount multiplier */
   zoomAmount?: number;
+  /** For slide: direction to slide from */
+  slideDirection?: SlideDirection;
+  /** For flip: axis to flip around */
+  flipAxis?: FlipAxis;
+  /** For cube: direction to rotate */
+  cubeDirection?: CubeDirection;
+  /** For cube: depth of the cube effect (default: 0.5) */
+  cubeDepth?: number;
+  /** For morph: displacement strength (default: 0.1) */
+  morphStrength?: number;
 }
 
 const WIPE_DIRECTION_MAP: Record<WipeDirection, number> = {
@@ -33,6 +57,23 @@ const WIPE_DIRECTION_MAP: Record<WipeDirection, number> = {
   'right-to-left': 1,
   'top-to-bottom': 2,
   'bottom-to-top': 3,
+};
+
+const SLIDE_DIRECTION_MAP: Record<SlideDirection, number> = {
+  'left': 0,
+  'right': 1,
+  'up': 2,
+  'down': 3,
+};
+
+const FLIP_AXIS_MAP: Record<FlipAxis, number> = {
+  'horizontal': 0,
+  'vertical': 1,
+};
+
+const CUBE_DIRECTION_MAP: Record<CubeDirection, number> = {
+  'left': 0,
+  'right': 1,
 };
 
 export class TransitionEffect {
@@ -61,6 +102,11 @@ export class TransitionEffect {
       wipeDirection: config.wipeDirection ?? 'left-to-right',
       wipeSoftness: config.wipeSoftness ?? 0.1,
       zoomAmount: config.zoomAmount ?? 0.3,
+      slideDirection: config.slideDirection ?? 'left',
+      flipAxis: config.flipAxis ?? 'horizontal',
+      cubeDirection: config.cubeDirection ?? 'left',
+      cubeDepth: config.cubeDepth ?? 0.5,
+      morphStrength: config.morphStrength ?? 0.1,
     };
 
     this.pipeline = null;
@@ -244,6 +290,19 @@ export class TransitionEffect {
         break;
       case 'zoom':
         data[1] = this.config.zoomAmount;
+        break;
+      case 'slide':
+        data[1] = SLIDE_DIRECTION_MAP[this.config.slideDirection];
+        break;
+      case 'flip':
+        data[1] = FLIP_AXIS_MAP[this.config.flipAxis];
+        break;
+      case 'cube':
+        data[1] = CUBE_DIRECTION_MAP[this.config.cubeDirection];
+        data[2] = this.config.cubeDepth;
+        break;
+      case 'morph':
+        data[1] = this.config.morphStrength;
         break;
     }
 

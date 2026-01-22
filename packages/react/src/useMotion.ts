@@ -80,16 +80,32 @@ export function useMotion(
     return unsubscribe;
   }, [sceneValue]);
 
-  // Track animation state
+  // Track animation state via change events
+  // When value stops changing, animation has ended
   useEffect(() => {
-    const checkAnimating = () => {
-      setIsAnimating(sceneValue.isAnimating);
+    let animationCheckTimeoutId: number | undefined;
+    let lastValue = sceneValue.get();
+    
+    const checkAnimationEnd = () => {
+      const currentValue = sceneValue.get();
+      if (currentValue === lastValue && isAnimating) {
+        // Value hasn't changed, animation likely ended
+        setIsAnimating(sceneValue.isAnimating);
+      }
+      lastValue = currentValue;
     };
-
-    // Poll animation state (SceneValue doesn't emit animation events)
-    const intervalId = setInterval(checkAnimating, 16);
-    return () => clearInterval(intervalId);
-  }, [sceneValue]);
+    
+    // Check periodically but only while animating
+    if (isAnimating) {
+      animationCheckTimeoutId = window.setInterval(checkAnimationEnd, 50);
+    }
+    
+    return () => {
+      if (animationCheckTimeoutId) {
+        clearInterval(animationCheckTimeoutId);
+      }
+    };
+  }, [sceneValue, isAnimating]);
 
   // Cleanup on unmount
   useEffect(() => {

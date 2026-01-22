@@ -58,10 +58,8 @@ function TransitionDemo() {
   }, []);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
     let isActive = true;
+    let rafId: number | null = null;
     let context: WebGPUContext | null = null;
     let shaderLibrary: ShaderLibrary | null = null;
 
@@ -82,7 +80,7 @@ function TransitionDemo() {
       context.device.queue.submit([commandEncoder.finish()]);
     };
 
-    const initialize = async (): Promise<void> => {
+    const initialize = async (canvas: HTMLCanvasElement): Promise<void> => {
       addStatus('Initializing WebGPU...', 'info');
 
       context = new WebGPUContext();
@@ -99,8 +97,14 @@ function TransitionDemo() {
       addStatus('WebGPU initialized.', 'success');
       contextRef.current = context;
 
+      const device = context.device;
+      if (!device) {
+        addStatus('WebGPU device unavailable - demo cannot run.', 'warning');
+        return;
+      }
+
       shaderLibrary = new ShaderLibrary();
-      shaderLibrary.setDevice(context.device);
+      shaderLibrary.setDevice(device);
       shaderLibrary.registerDefaults();
       registerTransitionShaders(shaderLibrary);
 
@@ -114,12 +118,12 @@ function TransitionDemo() {
       const rect = canvas.getBoundingClientRect();
       context.resize(rect.width, rect.height);
 
-      const textureA = context.device.createTexture({
+      const textureA = device.createTexture({
         size: [canvas.width, canvas.height],
         format: context.format ?? 'bgra8unorm',
         usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT,
       });
-      const textureB = context.device.createTexture({
+      const textureB = device.createTexture({
         size: [canvas.width, canvas.height],
         format: context.format ?? 'bgra8unorm',
         usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT,
@@ -134,15 +138,29 @@ function TransitionDemo() {
       renderFrame(0);
     };
 
-    initialize().catch((error: unknown) => {
+    const attemptStart = () => {
       if (!isActive) return;
-      const message = error instanceof Error ? error.message : String(error);
-      addStatus(`Error: ${message}`, 'error');
-      console.error(error);
-    });
+      const canvas = canvasRef.current;
+      if (!canvas) {
+        rafId = requestAnimationFrame(attemptStart);
+        return;
+      }
+
+      initialize(canvas).catch((error: unknown) => {
+        if (!isActive) return;
+        const message = error instanceof Error ? error.message : String(error);
+        addStatus(`Error: ${message}`, 'error');
+        console.error(error);
+      });
+    };
+
+    attemptStart();
 
     return () => {
       isActive = false;
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
       transitionRef.current?.destroy();
       context?.destroy();
       texturesRef.current.a?.destroy();

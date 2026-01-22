@@ -36,14 +36,12 @@ function EffectCollisionDemo() {
   }, []);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
     let isActive = true;
+    let rafId: number | null = null;
     let context: WebGPUContext | null = null;
     let screenPass: ScreenPass | null = null;
 
-    const runTest = async (): Promise<void> => {
+    const runTest = async (canvas: HTMLCanvasElement): Promise<void> => {
       addStatus('Starting effect name collision test...', 'info');
 
       context = new WebGPUContext();
@@ -59,8 +57,14 @@ function EffectCollisionDemo() {
 
       addStatus('WebGPU initialized successfully.', 'success');
 
+      const device = context.device;
+      if (!device) {
+        addStatus('WebGPU device unavailable - test cannot run.', 'warning');
+        return;
+      }
+
       const shaderLibrary = new ShaderLibrary();
-      shaderLibrary.setDevice(context.device);
+      shaderLibrary.setDevice(device);
       shaderLibrary.registerDefaults();
 
       screenPass = new ScreenPass(context, shaderLibrary);
@@ -101,15 +105,29 @@ function EffectCollisionDemo() {
       addStatus('Collision test completed.', 'success');
     };
 
-    runTest().catch((error: unknown) => {
+    const attemptStart = () => {
       if (!isActive) return;
-      const message = error instanceof Error ? error.message : String(error);
-      addStatus(`Test error: ${message}`, 'error');
-      console.error(error);
-    });
+      const canvas = canvasRef.current;
+      if (!canvas) {
+        rafId = requestAnimationFrame(attemptStart);
+        return;
+      }
+
+      runTest(canvas).catch((error: unknown) => {
+        if (!isActive) return;
+        const message = error instanceof Error ? error.message : String(error);
+        addStatus(`Test error: ${message}`, 'error');
+        console.error(error);
+      });
+    };
+
+    attemptStart();
 
     return () => {
       isActive = false;
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
       screenPass?.destroy();
       context?.destroy();
     };

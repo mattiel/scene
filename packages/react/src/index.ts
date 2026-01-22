@@ -42,6 +42,14 @@ export {
   type UseMotion2DReturn,
 } from './useMotion';
 
+// Motion bridge (SceneValue ↔ MotionValue)
+export {
+  useMotionBridge,
+  useMotionBridgeMany,
+  useMotionBridgeWithState,
+  type UseMotionBridgeWithStateReturn,
+} from './useMotionBridge';
+
 // Material management
 export {
   useMaterial,
@@ -51,6 +59,72 @@ export {
   type UseMaterialReturn,
   type UseDeformableMaterialReturn,
 } from './useMaterial';
+
+// Controller hooks (Scrollable, Draggable)
+export {
+  useScrollable,
+  useDraggable,
+  useScrollableInput,
+  useReducedMotion,
+  type UseScrollableOptions,
+  type UseScrollableReturn,
+  type UseDraggableOptions,
+  type UseDraggableReturn,
+  type UseScrollableInputOptions,
+  type UseScrollableInputReturn,
+} from './useControllers';
+
+// Screen effects
+export {
+  useScreenEffect,
+  useScreenEffects,
+  type UseScreenEffectOptions,
+  type UseScreenEffectReturn,
+  type UseScreenEffectsOptions,
+  type UseScreenEffectsReturn,
+} from './useScreenEffect';
+
+// Surface effects
+export {
+  useSurfaceEffect,
+  useSurfaceEffects,
+  type SurfaceEffectType,
+  type UseSurfaceEffectOptions,
+  type UseSurfaceEffectReturn,
+  type UseSurfaceEffectsReturn,
+} from './useSurfaceEffect';
+
+// Transitions
+export {
+  useTransition,
+  useTransitionStyle,
+  useStaggeredTransition,
+  type TransitionState,
+  type UseTransitionOptions,
+  type UseTransitionReturn,
+  type UseTransitionStyleOptions,
+  type UseStaggeredTransitionReturn,
+} from './useTransition';
+
+// GPU initialization
+export {
+  useGPU,
+  useWebGPUAvailable,
+  type UseGPUOptions,
+  type UseGPUReturn,
+  type GPUProgress,
+} from './useGPU';
+
+// Render loop
+export {
+  useRenderLoop,
+  useFixedUpdate,
+  useThrottledRender,
+  type RenderCallback,
+  type RenderCallbackArgs,
+  type UseRenderLoopOptions,
+  type UseRenderLoopReturn,
+} from './useRenderLoop';
 
 // Re-export useful types from dependencies
 export { InteractionMode } from '@scene/core';

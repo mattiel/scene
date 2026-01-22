@@ -18,6 +18,28 @@ import { Engine, InteractionMode, type EngineConfig } from '@scene/core';
 import { SurfaceRegistry, LayoutTracker, type LayoutTrackerOptions } from '@scene/surfaces';
 
 /**
+ * Effect stack interface (for useScreenEffect)
+ */
+export interface EffectStackInterface {
+  add: (config: { type: string; id?: string; enabled?: boolean; intensity?: number; params?: Record<string, number> }) => { id: string; type: string; enabled: boolean } | null;
+  remove: (id: string) => boolean;
+  enable: (id: string) => void;
+  disable: (id: string) => void;
+  setIntensity: (id: string, intensity: number) => void;
+  setParams: (id: string, params: Record<string, number>) => void;
+}
+
+/**
+ * Transition coordinator interface (for useTransition)
+ */
+export interface TransitionCoordinatorInterface {
+  startExit?: (type: string, config?: Record<string, unknown>) => void;
+  startEnter?: (type: string, config?: Record<string, unknown>) => void;
+  setProgress?: (progress: number) => void;
+  cancel?: () => void;
+}
+
+/**
  * Scene context value
  */
 export interface SceneContextValue {
@@ -37,6 +59,14 @@ export interface SceneContextValue {
   setMode: (mode: InteractionMode) => void;
   /** Set the canvas element */
   setCanvas: (canvas: HTMLCanvasElement | null) => void;
+  /** Screen effect stack (optional - set by user) */
+  effectStack?: EffectStackInterface;
+  /** Transition coordinator (optional - set by user) */
+  transitionCoordinator?: TransitionCoordinatorInterface;
+  /** Set the effect stack */
+  setEffectStack: (stack: EffectStackInterface | undefined) => void;
+  /** Set the transition coordinator */
+  setTransitionCoordinator: (coordinator: TransitionCoordinatorInterface | undefined) => void;
 }
 
 const SceneContext = createContext<SceneContextValue | null>(null);
@@ -102,13 +132,17 @@ export function SceneProvider({
   const [isReady, setIsReady] = useState(false);
   const [isGPUEnabled, setIsGPUEnabled] = useState(false);
   const [currentMode, setCurrentMode] = useState<InteractionMode>(normalizeMode(mode));
+  const [effectStack, setEffectStackState] = useState<EffectStackInterface | undefined>();
+  const [transitionCoordinator, setTransitionCoordinatorState] = useState<TransitionCoordinatorInterface | undefined>();
 
+  const shouldAutoStart = autoStart && typeof requestAnimationFrame === 'function';
+  
   // Initialize engine and related systems
   if (!engineRef.current) {
     const config: EngineConfig = {
       mode: normalizeMode(mode),
       trackFPS,
-      autoStart,
+      autoStart: shouldAutoStart,
     };
     
     engineRef.current = new Engine(config);
@@ -117,9 +151,6 @@ export function SceneProvider({
       registryRef.current,
       layoutOptions
     );
-    
-    // Start layout tracking
-    layoutTrackerRef.current.start();
   }
 
   const engine = engineRef.current;
@@ -141,6 +172,16 @@ export function SceneProvider({
       engine.setCanvas(canvas);
     }
   }, [engine]);
+
+  // Handle effect stack setting
+  const setEffectStack = useCallback((stack: EffectStackInterface | undefined) => {
+    setEffectStackState(stack);
+  }, []);
+
+  // Handle transition coordinator setting
+  const setTransitionCoordinator = useCallback((coordinator: TransitionCoordinatorInterface | undefined) => {
+    setTransitionCoordinatorState(coordinator);
+  }, []);
 
   // Set up event listeners
   useEffect(() => {
@@ -164,6 +205,18 @@ export function SceneProvider({
       unsubMode();
     };
   }, [engine, onReady, onModeChange]);
+  
+  // Start layout tracking after mount (avoids SSR side effects)
+  useEffect(() => {
+    const tracker = layoutTrackerRef.current;
+    if (!tracker) return;
+    
+    tracker.start();
+    
+    return () => {
+      tracker.stop();
+    };
+  }, []);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -192,6 +245,10 @@ export function SceneProvider({
     mode: currentMode,
     setMode: handleSetMode,
     setCanvas,
+    effectStack,
+    transitionCoordinator,
+    setEffectStack,
+    setTransitionCoordinator,
   };
 
   return (

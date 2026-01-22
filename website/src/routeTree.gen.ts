@@ -11,7 +11,10 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DemosSurfacesRouteImport } from './routes/demos/surfaces'
+import { Route as DemosScrollableBasicRouteImport } from './routes/demos/scrollable-basic'
+import { Route as DemosMotionBasicRouteImport } from './routes/demos/motion-basic'
 import { Route as DemosInputRouteImport } from './routes/demos/input'
+import { Route as DemosDraggableBasicRouteImport } from './routes/demos/draggable-basic'
 import { Route as DemosCarouselRouteImport } from './routes/demos/carousel'
 import { Route as DemosA11yRouteImport } from './routes/demos/a11y'
 import { Route as DemosScreenTransitionRouteImport } from './routes/demos/screen/transition'
@@ -33,9 +36,24 @@ const DemosSurfacesRoute = DemosSurfacesRouteImport.update({
   path: '/demos/surfaces',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DemosScrollableBasicRoute = DemosScrollableBasicRouteImport.update({
+  id: '/demos/scrollable-basic',
+  path: '/demos/scrollable-basic',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DemosMotionBasicRoute = DemosMotionBasicRouteImport.update({
+  id: '/demos/motion-basic',
+  path: '/demos/motion-basic',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DemosInputRoute = DemosInputRouteImport.update({
   id: '/demos/input',
   path: '/demos/input',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DemosDraggableBasicRoute = DemosDraggableBasicRouteImport.update({
+  id: '/demos/draggable-basic',
+  path: '/demos/draggable-basic',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DemosCarouselRoute = DemosCarouselRouteImport.update({
@@ -98,7 +116,10 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/demos/a11y': typeof DemosA11yRoute
   '/demos/carousel': typeof DemosCarouselRoute
+  '/demos/draggable-basic': typeof DemosDraggableBasicRoute
   '/demos/input': typeof DemosInputRoute
+  '/demos/motion-basic': typeof DemosMotionBasicRoute
+  '/demos/scrollable-basic': typeof DemosScrollableBasicRoute
   '/demos/surfaces': typeof DemosSurfacesRoute
   '/demos/navigation/transition': typeof DemosNavigationTransitionRoute
   '/demos/navigation/transition-auto': typeof DemosNavigationTransitionAutoRoute
@@ -113,7 +134,10 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/demos/a11y': typeof DemosA11yRoute
   '/demos/carousel': typeof DemosCarouselRoute
+  '/demos/draggable-basic': typeof DemosDraggableBasicRoute
   '/demos/input': typeof DemosInputRoute
+  '/demos/motion-basic': typeof DemosMotionBasicRoute
+  '/demos/scrollable-basic': typeof DemosScrollableBasicRoute
   '/demos/surfaces': typeof DemosSurfacesRoute
   '/demos/navigation/transition': typeof DemosNavigationTransitionRoute
   '/demos/navigation/transition-auto': typeof DemosNavigationTransitionAutoRoute
@@ -129,7 +153,10 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/demos/a11y': typeof DemosA11yRoute
   '/demos/carousel': typeof DemosCarouselRoute
+  '/demos/draggable-basic': typeof DemosDraggableBasicRoute
   '/demos/input': typeof DemosInputRoute
+  '/demos/motion-basic': typeof DemosMotionBasicRoute
+  '/demos/scrollable-basic': typeof DemosScrollableBasicRoute
   '/demos/surfaces': typeof DemosSurfacesRoute
   '/demos/navigation/transition': typeof DemosNavigationTransitionRoute
   '/demos/navigation/transition-auto': typeof DemosNavigationTransitionAutoRoute
@@ -146,7 +173,10 @@ export interface FileRouteTypes {
     | '/'
     | '/demos/a11y'
     | '/demos/carousel'
+    | '/demos/draggable-basic'
     | '/demos/input'
+    | '/demos/motion-basic'
+    | '/demos/scrollable-basic'
     | '/demos/surfaces'
     | '/demos/navigation/transition'
     | '/demos/navigation/transition-auto'
@@ -161,7 +191,10 @@ export interface FileRouteTypes {
     | '/'
     | '/demos/a11y'
     | '/demos/carousel'
+    | '/demos/draggable-basic'
     | '/demos/input'
+    | '/demos/motion-basic'
+    | '/demos/scrollable-basic'
     | '/demos/surfaces'
     | '/demos/navigation/transition'
     | '/demos/navigation/transition-auto'
@@ -176,7 +209,10 @@ export interface FileRouteTypes {
     | '/'
     | '/demos/a11y'
     | '/demos/carousel'
+    | '/demos/draggable-basic'
     | '/demos/input'
+    | '/demos/motion-basic'
+    | '/demos/scrollable-basic'
     | '/demos/surfaces'
     | '/demos/navigation/transition'
     | '/demos/navigation/transition-auto'
@@ -192,7 +228,10 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DemosA11yRoute: typeof DemosA11yRoute
   DemosCarouselRoute: typeof DemosCarouselRoute
+  DemosDraggableBasicRoute: typeof DemosDraggableBasicRoute
   DemosInputRoute: typeof DemosInputRoute
+  DemosMotionBasicRoute: typeof DemosMotionBasicRoute
+  DemosScrollableBasicRoute: typeof DemosScrollableBasicRoute
   DemosSurfacesRoute: typeof DemosSurfacesRoute
   DemosNavigationTransitionRoute: typeof DemosNavigationTransitionRoute
   DemosNavigationTransitionAutoRoute: typeof DemosNavigationTransitionAutoRoute
@@ -220,11 +259,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DemosSurfacesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/demos/scrollable-basic': {
+      id: '/demos/scrollable-basic'
+      path: '/demos/scrollable-basic'
+      fullPath: '/demos/scrollable-basic'
+      preLoaderRoute: typeof DemosScrollableBasicRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/demos/motion-basic': {
+      id: '/demos/motion-basic'
+      path: '/demos/motion-basic'
+      fullPath: '/demos/motion-basic'
+      preLoaderRoute: typeof DemosMotionBasicRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/demos/input': {
       id: '/demos/input'
       path: '/demos/input'
       fullPath: '/demos/input'
       preLoaderRoute: typeof DemosInputRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/demos/draggable-basic': {
+      id: '/demos/draggable-basic'
+      path: '/demos/draggable-basic'
+      fullPath: '/demos/draggable-basic'
+      preLoaderRoute: typeof DemosDraggableBasicRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/demos/carousel': {
@@ -304,7 +364,10 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DemosA11yRoute: DemosA11yRoute,
   DemosCarouselRoute: DemosCarouselRoute,
+  DemosDraggableBasicRoute: DemosDraggableBasicRoute,
   DemosInputRoute: DemosInputRoute,
+  DemosMotionBasicRoute: DemosMotionBasicRoute,
+  DemosScrollableBasicRoute: DemosScrollableBasicRoute,
   DemosSurfacesRoute: DemosSurfacesRoute,
   DemosNavigationTransitionRoute: DemosNavigationTransitionRoute,
   DemosNavigationTransitionAutoRoute: DemosNavigationTransitionAutoRoute,

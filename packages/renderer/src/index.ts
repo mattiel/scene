@@ -12,7 +12,8 @@ export type {
   WebGPUContextOptions, 
   WebGPUContextState,
   BrowserInfo,
-  WebGPUCapabilities 
+  WebGPUCapabilities,
+  WebGPUInitProgress,
 } from './WebGPUContext';
 
 export { QuadRenderer } from './QuadRenderer';
@@ -28,8 +29,13 @@ export type { ShaderModule, CompiledShader } from './ShaderLibrary';
 export {
   Material,
   ShaderMaterial,
+  StandardMaterial,
   createBasicMaterial,
+  createColorMaterial,
+  createTexturedMaterial,
+  createEmissiveMaterial,
   UniformBuffer,
+  GlobalUniformManager,
   uniformSize,
   uniformAlignment,
   calculateLayout,
@@ -38,8 +44,11 @@ export {
   type BlendMode,
   type TypedMaterialConfig,
   type ShaderMaterialConfig,
+  type StandardMaterialConfig,
   type Deformation,
   type VertexAttribute,
+  type TextureSlot,
+  type BindGroupEntry,
   type UniformValue,
   type UniformDefinition,
   type UniformSchema,
@@ -55,10 +64,20 @@ export {
   uint32Index,
   Geometry,
   PlaneGeometry,
+  CircleGeometry,
+  RingGeometry,
+  MorphGeometry,
   createFullscreenQuad,
+  createScaleMorphTarget,
+  createOffsetMorphTarget,
+  createBulgeMorphTarget,
   type TypedArray,
   type BoundingBox,
   type PlaneGeometryConfig,
+  type CircleGeometryConfig,
+  type RingGeometryConfig,
+  type MorphTarget,
+  type MorphGeometryConfig,
 } from './geometry';
 
 // Mesh
@@ -67,6 +86,16 @@ export {
   type MeshTransform,
   type MeshConfig,
 } from './Mesh';
+
+// Mesh Renderer
+export {
+  MeshRenderer,
+  createMeshRenderer,
+  type SortMode,
+  type CameraData,
+  type RenderStats,
+  type MeshRendererConfig,
+} from './MeshRenderer';
 
 // Deformations
 export {
@@ -85,3 +114,22 @@ export {
   type RippleDeformationConfig,
   type WaveDeformationConfig,
 } from './deformations';
+
+// Camera & Matrix Utilities
+export {
+  Camera,
+  perspective,
+  lookAt,
+  translate,
+  rotateX,
+  rotateY,
+  rotateZ,
+  scale,
+  multiply,
+  composeModelMatrix,
+  identity,
+  type CameraConfig,
+} from './Camera';
+
+// Note: FabricWaveRenderer has been moved to website/src/lib/carousel/
+// It is a user-level implementation, not a library primitive.

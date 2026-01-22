@@ -1,12 +1,12 @@
-import { defineConfig } from 'vite';
+import { defineConfig, PluginOption } from 'vite';
 import dts from 'vite-plugin-dts';
 
 export default defineConfig({
   plugins: [
     dts({
       insertTypesEntry: true,
-      rollupTypes: true,
-    }),
+      rollupTypes: false,
+    }) as PluginOption,
   ],
   build: {
     lib: {

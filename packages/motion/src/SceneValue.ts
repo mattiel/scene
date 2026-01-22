@@ -265,6 +265,127 @@ export class SceneValue {
   }
 
   /**
+   * Create a derived value that blends this value with another
+   * 
+   * @param other - The other SceneValue to blend with
+   * @param ratio - Blend ratio (0 = this, 1 = other) - number or SceneValue
+   * @returns A derived value that blends the two sources
+   * 
+   * @example
+   * ```typescript
+   * const start = new SceneValue(0);
+   * const end = new SceneValue(100);
+   * 
+   * // Static blend at 50%
+   * const mid = start.mix(end, 0.5); // → 50
+   * 
+   * // Dynamic blend controlled by another value
+   * const progress = new SceneValue(0);
+   * const blended = start.mix(end, progress);
+   * progress.animateTo(1); // blended goes from 0 → 100
+   * ```
+   */
+  mix(other: SceneValue, ratio: number | SceneValue): DerivedSceneValue {
+    if (typeof ratio === 'number') {
+      // Static ratio - simple linear interpolation
+      return this.derive((value) => {
+        return value + (other.get() - value) * ratio;
+      });
+    } else {
+      // Dynamic ratio - create a multi-source derived value
+      const derived = new MultiSourceDerivedSceneValue(
+        [this, other, ratio],
+        ([a, b, t]) => a + (b - a) * t
+      );
+      this.derivedValues.add(derived);
+      other._addDerived(derived);
+      ratio._addDerived(derived);
+      return derived;
+    }
+  }
+
+  /**
+   * Create a derived value that clamps this value to bounds
+   * 
+   * Unlike the constructor `clamp` option (which mutates during set),
+   * this creates a read-only derived view with clamped output.
+   * 
+   * @param min - Minimum bound
+   * @param max - Maximum bound
+   * @returns A derived value clamped to [min, max]
+   * 
+   * @example
+   * ```typescript
+   * const raw = new SceneValue(150);
+   * const clamped = raw.clamp(0, 100); // → 100
+   * 
+   * raw.set(-50);
+   * console.log(clamped.get()); // → 0
+   * console.log(raw.get()); // → -50 (unchanged)
+   * ```
+   */
+  clamp(min: number, max: number): DerivedSceneValue {
+    return this.derive((value) => Math.max(min, Math.min(max, value)));
+  }
+
+  /**
+   * Create a derived value that snaps to the nearest value in an array
+   * 
+   * @param values - Array of values to snap to (must be sorted)
+   * @returns A derived value that snaps to nearest
+   * 
+   * @example
+   * ```typescript
+   * const position = new SceneValue(73);
+   * const snapped = position.snap([0, 50, 100]); // → 50
+   * 
+   * position.set(80);
+   * console.log(snapped.get()); // → 100
+   * ```
+   */
+  snap(values: number[]): DerivedSceneValue {
+    if (values.length === 0) {
+      throw new Error('snap() requires at least one value');
+    }
+    
+    // Sort values for binary search
+    const sorted = [...values].sort((a, b) => a - b);
+    
+    return this.derive((value) => {
+      // Binary search for closest value
+      let left = 0;
+      let right = sorted.length - 1;
+      
+      // Handle edge cases
+      if (value <= sorted[0]) return sorted[0];
+      if (value >= sorted[right]) return sorted[right];
+      
+      // Binary search for the two closest values
+      while (left < right - 1) {
+        const mid = Math.floor((left + right) / 2);
+        if (sorted[mid] === value) return value;
+        if (sorted[mid] < value) {
+          left = mid;
+        } else {
+          right = mid;
+        }
+      }
+      
+      // Return the closer of the two
+      const distLeft = Math.abs(value - sorted[left]);
+      const distRight = Math.abs(value - sorted[right]);
+      return distLeft <= distRight ? sorted[left] : sorted[right];
+    });
+  }
+
+  /**
+   * Internal: Add a derived value to track (for multi-source derived values)
+   */
+  _addDerived(derived: DerivedSceneValue): void {
+    this.derivedValues.add(derived);
+  }
+
+  /**
    * Remove a derived value (called internally when derived is destroyed)
    */
   _removeDerived(derived: DerivedSceneValue): void {
@@ -535,6 +656,71 @@ export class DerivedSceneValue {
     this.source._removeDerived(this);
     this.listeners.clear();
     this.bindings.clear();
+  }
+}
+
+/**
+ * MultiSourceDerivedSceneValue - A derived value from multiple SceneValue sources
+ * 
+ * Used internally for operations like mix() with dynamic ratio.
+ */
+export class MultiSourceDerivedSceneValue extends DerivedSceneValue {
+  private sources: SceneValue[];
+  private multiTransform: (values: number[]) => number;
+
+  constructor(
+    sources: SceneValue[],
+    transform: (values: number[]) => number
+  ) {
+    // Call parent with first source and a placeholder transform
+    super(sources[0], () => 0);
+    
+    this.sources = sources;
+    this.multiTransform = transform;
+    
+    // Calculate initial value
+    (this as any)._value = this.multiTransform(sources.map(s => s.get()));
+  }
+
+  /**
+   * Override _update to use all sources
+   */
+  _update(): void {
+    const values = this.sources.map(s => s.get());
+    const newValue = this.multiTransform(values);
+    
+    if (newValue === (this as any)._value) return;
+    
+    (this as any)._value = newValue;
+
+    // Notify listeners
+    for (const listener of (this as any).listeners) {
+      try {
+        listener(newValue);
+      } catch (error) {
+        console.error('Error in MultiSourceDerivedSceneValue listener:', error);
+      }
+    }
+
+    // Update bound uniforms
+    for (const [target, uniformName] of (this as any).bindings) {
+      try {
+        target.setUniform(uniformName, newValue);
+      } catch (error) {
+        console.error('Error updating bound uniform:', error);
+      }
+    }
+  }
+
+  /**
+   * Clean up - remove from all sources
+   */
+  destroy(): void {
+    for (const source of this.sources) {
+      source._removeDerived(this);
+    }
+    (this as any).listeners.clear();
+    (this as any).bindings.clear();
   }
 }
 

@@ -31,6 +31,16 @@ export interface NormalizedPointer {
   isPrimary: boolean;
   /** Timestamp of the event */
   timestamp: number;
+  /** Pen tilt X in degrees (-90 to 90), 0 for touch/mouse */
+  tiltX: number;
+  /** Pen tilt Y in degrees (-90 to 90), 0 for touch/mouse */
+  tiltY: number;
+  /** Pen twist angle in degrees (0-359), 0 for touch/mouse */
+  twist: number;
+  /** Contact width in CSS pixels (touch only) */
+  width: number;
+  /** Contact height in CSS pixels (touch only) */
+  height: number;
 }
 
 /**
@@ -253,6 +263,11 @@ export class PointerManager {
       pressure: e.pressure,
       isPrimary: e.isPrimary,
       timestamp: e.timeStamp,
+      tiltX: e.tiltX,
+      tiltY: e.tiltY,
+      twist: e.twist,
+      width: e.width,
+      height: e.height,
     };
   }
 

@@ -52,3 +52,6 @@ export type {
   Position,
   Velocity,
 } from './Draggable';
+
+// Utilities
+export { prefersReducedMotion, onReducedMotionChange } from './utils';

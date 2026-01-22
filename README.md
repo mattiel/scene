@@ -2,24 +2,300 @@
 
 A DOM-first cinematic effects engine for the web, powered by WebGPU.
 
-## Architecture
+Scene augments real HTML with GPU-powered visual effects while keeping DOM as the source of truth. It provides **primitives** for building custom interactions—not pre-built components.
 
-Scene is a monorepo built with pnpm workspaces and Turborepo for optimal build performance.
+## Features
 
-### Packages
-
-- **[@scene/core](./packages/core)** - Core engine with event system and render loop
-
-### Coming Soon
-
-- `@scene/renderer` - WebGPU rendering layer
-- `@scene/surfaces` - DOM element tracking and GPU augmentation
-- `@scene/screen` - Fullscreen post-processing effects
-- `@scene/input` - Pointer input management
-- `@scene/navigation` - Navigation transitions
-- `@scene/a11y` - Accessibility layer
+- **DOM-first** - Content lives in the DOM. Accessibility and SEO work without Scene.
+- **GPU visual layer** - WebGPU for distortion, blur, transitions, post-processing
+- **Composable primitives** - Build carousels, sliders, galleries from `Scrollable`, `Draggable`, `SceneValue`
+- **Motion integration** - Spring physics, derived values, velocity tracking
+- **Graceful degradation** - Falls back to DOM-only when WebGPU unavailable
 
 ## Quick Start
+
+```bash
+npm install @scene/react @scene/core @scene/motion @scene/controllers
+```
+
+```tsx
+import { SceneProvider, useScrollable, useMotion } from '@scene/react';
+import { springs } from '@scene/motion';
+
+function App() {
+  return (
+    <SceneProvider mode="dom-interactive">
+      <Slider />
+    </SceneProvider>
+  );
+}
+
+function Slider() {
+  const { offset, handleDragStart, handleDrag, handleDragEnd } = useScrollable({
+    bounds: { min: 0, max: 500 },
+    snap: { points: [0, 100, 200, 300, 400, 500] },
+  });
+  
+  const { value: scale, animateTo } = useMotion(1);
+  
+  return (
+    <div
+      onPointerDown={handleDragStart}
+      onPointerMove={(e) => handleDrag(e.movementX)}
+      onPointerUp={handleDragEnd}
+      onMouseEnter={() => animateTo(1.05, springs.snappy)}
+      onMouseLeave={() => animateTo(1, springs.snappy)}
+      style={{ transform: `translateX(${offset}px) scale(${scale})` }}
+    >
+      Drag me
+    </div>
+  );
+}
+```
+
+---
+
+## TanStack Router Integration
+
+Scene works seamlessly with TanStack Router. The project demos use this setup.
+
+### Basic Setup
+
+Wrap your app with `SceneProvider` at the root:
+
+```tsx
+// src/routes/__root.tsx
+import { Outlet, createRootRoute } from '@tanstack/react-router';
+import { SceneProvider } from '@scene/react';
+
+export const Route = createRootRoute({
+  component: RootComponent,
+});
+
+function RootComponent() {
+  return (
+    <SceneProvider mode="dom-interactive">
+      <Outlet />
+    </SceneProvider>
+  );
+}
+```
+
+### Page Transitions
+
+Use `useTransition` with TanStack's navigation:
+
+```tsx
+// src/routes/index.tsx
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { useTransition } from '@scene/react';
+
+export const Route = createFileRoute('/')({
+  component: HomePage,
+});
+
+function HomePage() {
+  const navigate = useNavigate();
+  const { startExit, startEnter, progress, state } = useTransition({
+    type: 'dissolve',
+    duration: 400,
+  });
+
+  const handleNavigate = async (to: string) => {
+    await startExit();           // Run exit animation
+    await navigate({ to });      // TanStack navigation
+    startEnter();                // Run enter animation
+  };
+
+  return (
+    <div style={{ opacity: state === 'exiting' ? 1 - progress : 1 }}>
+      <button onClick={() => handleNavigate('/about')}>
+        Go to About
+      </button>
+    </div>
+  );
+}
+```
+
+### With View Transitions API
+
+Combine Scene transitions with TanStack's View Transitions support:
+
+```tsx
+// src/router.tsx
+import { createRouter } from '@tanstack/react-router';
+import { routeTree } from './routeTree.gen';
+
+export const router = createRouter({
+  routeTree,
+  defaultViewTransition: true, // Enable native View Transitions
+});
+```
+
+```tsx
+// In your component - coordinate both systems
+const { startExit, startEnter } = useTransition({ type: 'dissolve' });
+
+const handleNavigate = async (to: string) => {
+  await startExit();
+  await navigate({ to, viewTransition: true });
+  startEnter();
+};
+```
+
+### Canvas-Interactive Mode
+
+For 3D carousels or GPU-driven interactions, use canvas-interactive mode:
+
+```tsx
+<SceneProvider mode="canvas-interactive">
+  <canvas style={{ pointerEvents: 'auto' }} />
+  {/* Scene handles input on canvas */}
+</SceneProvider>
+```
+
+---
+
+## Packages
+
+| Package | Description |
+|---------|-------------|
+| [@scene/core](./packages/core) | Engine, EventBus, RAFScheduler |
+| [@scene/renderer](./packages/renderer) | WebGPU context, Geometry, Materials, Mesh, Deformations |
+| [@scene/surfaces](./packages/surfaces) | DOM element tracking, GhostSurface, layout sync |
+| [@scene/screen](./packages/screen) | Post-processing effects, transitions |
+| [@scene/input](./packages/input) | Pointer handling, gestures, multi-touch, picking |
+| [@scene/motion](./packages/motion) | SceneValue, spring presets, derived values |
+| [@scene/controllers](./packages/controllers) | Scrollable, Draggable primitives |
+| [@scene/navigation](./packages/navigation) | TransitionCoordinator |
+| [@scene/a11y](./packages/a11y) | DOMMirror, FocusSync, LiveAnnouncer |
+| [@scene/react](./packages/react) | React hooks and SceneProvider |
+
+---
+
+## Common Patterns
+
+### Scroll-Linked Effects
+
+```tsx
+import { SceneValue, springs } from '@scene/motion';
+
+const scrollY = new SceneValue(0);
+
+// Derive multiple effects from scroll position
+const parallax = scrollY.derive(v => v * 0.5);
+const fade = scrollY.interpolate({
+  inputRange: [0, 300],
+  outputRange: [1, 0],
+  clamp: true,
+});
+
+// Bind to GPU uniforms
+parallax.bindTo(material, 'uParallax');
+fade.bindTo(material, 'uFade');
+
+// Update on scroll
+window.addEventListener('scroll', () => scrollY.set(window.scrollY));
+```
+
+### Building a Carousel
+
+Carousels are composed from primitives—not provided as a component:
+
+```tsx
+import { useScrollable, useSurface } from '@scene/react';
+
+function Carousel({ items }) {
+  const { offset, handleDrag, handleDragEnd, snapTo } = useScrollable({
+    bounds: { min: -items.length * 320, max: 0 },
+    snap: { 
+      points: items.map((_, i) => -i * 320),
+      spring: springs.snappy,
+    },
+  });
+
+  return (
+    <div onPointerMove={e => handleDrag(e.movementX)} onPointerUp={handleDragEnd}>
+      {items.map((item, i) => (
+        <Card key={item.id} x={offset + i * 320} />
+      ))}
+    </div>
+  );
+}
+```
+
+### Gesture-Driven Effects
+
+```tsx
+import { useDraggable } from '@scene/react';
+
+function DraggableCard() {
+  const { position, velocity, handleDrag, handleDragEnd } = useDraggable({
+    bounds: { minX: 0, maxX: 500, minY: 0, maxY: 300 },
+    inertia: { friction: 0.92 },
+  });
+
+  // Use velocity for tilt effect
+  const tilt = Math.max(-15, Math.min(15, velocity.x * 0.1));
+
+  return (
+    <div
+      onPointerMove={e => handleDrag(e.movementX, e.movementY)}
+      onPointerUp={handleDragEnd}
+      style={{
+        transform: `translate(${position.x}px, ${position.y}px) rotateY(${tilt}deg)`,
+      }}
+    />
+  );
+}
+```
+
+### Surface Effects
+
+```tsx
+import { useSurface, useSurfaceEffect } from '@scene/react';
+
+function Card({ id }) {
+  const { ref } = useSurface(id);
+  const { enable, disable } = useSurfaceEffect(id, 'blur', { strength: 5 });
+
+  return (
+    <div
+      ref={ref}
+      onMouseEnter={enable}
+      onMouseLeave={disable}
+    >
+      Hover for blur
+    </div>
+  );
+}
+```
+
+### Reduced Motion Support
+
+```tsx
+import { prefersReducedMotion, onReducedMotionChange } from '@scene/controllers';
+import { springs } from '@scene/motion';
+
+// Check at runtime
+if (prefersReducedMotion()) {
+  // Use instant transitions
+}
+
+// React to changes
+onReducedMotionChange((prefers) => {
+  // Update animation settings
+});
+
+// Scrollable respects it automatically
+const scroll = useScrollable({
+  reducedMotion: true, // Disables inertia, uses instant snaps
+});
+```
+
+---
+
+## Development
 
 ```bash
 # Install dependencies
@@ -28,158 +304,75 @@ pnpm install
 # Build all packages
 pnpm build
 
-# Run typechecking
-pnpm typecheck
-
-# Lint code
-pnpm lint
-
-# Clean build artifacts
-pnpm clean
-```
-
-## Development
-
-This monorepo uses Turborepo for intelligent build caching and orchestration:
-
-- **Parallel Execution**: Tasks run in parallel across packages
-- **Smart Caching**: Unchanged packages are skipped (22ms vs 1.7s builds!)
-- **Dependency Graph**: Builds respect package dependencies
-- **Incremental Builds**: Only rebuilds what changed
-
-### Commands
-
-```bash
 # Development mode (watch)
 pnpm dev
-
-# Build all packages
-pnpm build
 
 # Type checking
 pnpm typecheck
 
-# Linting
-pnpm lint
-
-# Format code
-pnpm format
-
-# Clean everything
-pnpm clean
+# Run demo site
+cd website && pnpm dev
 ```
 
-### Performance
+### Monorepo Structure
 
-Turborepo provides dramatic speedups through caching:
+```
+scene/
+├─ packages/
+│  ├─ core/          # Engine, EventBus, RAFScheduler
+│  ├─ renderer/      # WebGPU, Geometry, Materials
+│  ├─ surfaces/      # DOM tracking, GhostSurface
+│  ├─ screen/        # Post-processing, transitions
+│  ├─ input/         # Pointer, gestures, picking
+│  ├─ motion/        # SceneValue, springs
+│  ├─ controllers/   # Scrollable, Draggable
+│  ├─ navigation/    # TransitionCoordinator
+│  ├─ a11y/          # Accessibility layer
+│  └─ react/         # React bindings
+├─ website/          # Demo site (TanStack Router)
+└─ demos/            # Standalone demos
+```
 
-- **First build**: ~1.7s
-- **Cached build**: ~22ms (77x faster!)
-- **First typecheck**: ~500ms
-- **Cached typecheck**: ~22ms (23x faster!)
-
-## Tech Stack
-
-- **TypeScript** - Type-safe codebase
-- **pnpm** - Fast, disk-efficient package manager
-- **Turborepo** - High-performance monorepo build system
-- **Vite** - Lightning-fast build tool
-- **ESLint** - Code quality
-- **Prettier** - Code formatting
-
-## Project Status
-
-**Current Phase**: Phase 1 Complete ✅
-
-- ✅ Monorepo foundation with Turborepo
-- ✅ Core engine with event system
-- ✅ RAF scheduler with priorities
-- ⏳ WebGPU renderer (Phase 2)
-- ⏳ Surface tracking system (Phase 3)
-- ⏳ Screen effects (Phase 4)
-- ⏳ Input management (Phase 5)
-- ⏳ Navigation transitions (Phase 6)
-- ⏳ Accessibility layer (Phase 7)
-- ⏳ 3D Carousel demo (Phase 8)
-
-See [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md) for detailed roadmap.
-
-## Documentation
-
-- [Implementation Plan](./IMPLEMENTATION_PLAN.md) - Development roadmap
-- [Scene Specification](./SCENE_SPEC.md) - Product requirements
-- [Phase 1 Summary](./PHASE1_COMPLETE.md) - Core package completion
-- [Core Package](./packages/core/README.md) - API documentation
-
-## Requirements
-
-- Node.js >= 18.0.0
-- pnpm >= 8.0.0
+---
 
 ## Browser Compatibility
 
 Scene uses WebGPU for GPU-accelerated rendering. When WebGPU is not available, Scene gracefully degrades to DOM-only mode.
 
-### WebGPU Support
-
 | Browser | Version | Status |
 |---------|---------|--------|
-| Chrome | 113+ | ✅ Full support |
-| Edge | 113+ | ✅ Full support |
-| Firefox | 121+ | ✅ Full support |
-| Safari (macOS) | 17+ | ✅ Full support |
-| Safari (iOS) | 17.4+ | ✅ Full support (enabled by default) |
-| Safari (iOS) | 17.0-17.3 | ⚠️ Requires enabling in Settings |
-| Safari (iOS) | 16 and earlier | ❌ Not supported |
-
-### iOS Safari Notes
-
-- **iOS 17.4+**: WebGPU is enabled by default
-- **iOS 17.0-17.3**: WebGPU available but requires manual enable:
-  1. Open **Settings** > **Safari** > **Advanced** > **Feature Flags**
-  2. Enable **WebGPU**
-- **iOS 16 and earlier**: WebGPU not available; Scene will run in degraded mode (DOM-only)
+| Chrome | 113+ | Full support |
+| Edge | 113+ | Full support |
+| Firefox | 121+ | Full support |
+| Safari (macOS) | 17+ | Full support |
+| Safari (iOS) | 17.4+ | Full support |
+| Safari (iOS) | 17.0-17.3 | Requires Settings enable |
+| Older browsers | - | DOM-only fallback |
 
 ### Graceful Degradation
 
-When WebGPU is not available, Scene automatically degrades:
+```tsx
+import { useScene } from '@scene/react';
 
-```typescript
-import { WebGPUContext } from '@scene/renderer';
-
-const context = new WebGPUContext();
-const initialized = await context.initialize({ canvas });
-
-if (!context.isAvailable) {
-  // Scene continues to work with:
-  // - DOM tracking and layout observation
-  // - Motion callbacks still fire
-  // - No GPU rendering (visual effects disabled)
-  console.log('Running in degraded mode');
-}
-
-// Check browser info for debugging
-const browser = WebGPUContext.detectBrowser();
-if (browser.isIOSSafari) {
-  console.log(`iOS Safari ${browser.iosVersion?.major}.${browser.iosVersion?.minor}`);
+function App() {
+  const { isGPUEnabled } = useScene();
+  
+  return (
+    <div>
+      {!isGPUEnabled && <p>Running without GPU effects</p>}
+      <Content />
+    </div>
+  );
 }
 ```
 
-### Feature Detection
+---
 
-```typescript
-// Check expected support before initialization
-const support = WebGPUContext.checkExpectedSupport();
-if (!support.supported) {
-  console.warn(support.reason);
-}
+## Requirements
 
-// After initialization, check capabilities
-if (context.capabilities) {
-  console.log('Max texture size:', context.capabilities.maxTextureDimension2D);
-  console.log('Canvas format:', context.capabilities.preferredFormat);
-}
-```
+- Node.js >= 18.0.0
+- pnpm >= 8.0.0 (for development)
+- React >= 18.0.0 (for @scene/react)
 
 ## License
 

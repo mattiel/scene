@@ -85,15 +85,26 @@ export function useMaterial(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
 
-  // Track initialization state
+  // Track initialization state - check on material updates and periodically until initialized
   useEffect(() => {
     const checkInitialized = () => {
       if (materialRef.current?.isInitialized && !isInitialized) {
         setIsInitialized(true);
+        return true;
       }
+      return false;
     };
 
-    const intervalId = setInterval(checkInitialized, 100);
+    // If already initialized, no need to poll
+    if (checkInitialized()) return;
+
+    // Poll less frequently - material init happens on first render
+    const intervalId = setInterval(() => {
+      if (checkInitialized()) {
+        clearInterval(intervalId);
+      }
+    }, 200);
+    
     return () => clearInterval(intervalId);
   }, [isInitialized]);
 

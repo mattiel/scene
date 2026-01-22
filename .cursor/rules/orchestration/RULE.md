@@ -48,5 +48,13 @@ Example: `[rule: webgpu] Applying constraints for renderer work`
 | Surfaces | `@surfaces` | `packages/surfaces/` |
 | Input | `@input` | `packages/input/` |
 | Accessibility | `@a11y` | `packages/a11y/` |
+| Enhancement | `@enhancement` | `demos/`, `website/src/lib/`, `website/src/routes/demos/` |
 | Rules | `@ruler` | `.cursor/rules/` |
 | Review | `@review` | Changed files (pre-push bug detection) |
+
+## Progressive Enhancement
+
+When working on demos/implementations and a library gap is found:
+1. Document gap → Enhance library primitive → Use in implementation
+2. Delegate library changes to appropriate domain rule
+3. Keep demo code as pure primitive composition

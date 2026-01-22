@@ -91,6 +91,7 @@ export class RAFScheduler {
    */
   start(): void {
     if (this.isRunning) return;
+    if (typeof requestAnimationFrame !== 'function') return;
     
     this.isRunning = true;
     this.lastTimestamp = performance.now();
@@ -112,10 +113,10 @@ export class RAFScheduler {
     if (!this.isRunning) return;
     
     this.isRunning = false;
-    if (this.rafId !== null) {
+    if (this.rafId !== null && typeof cancelAnimationFrame === 'function') {
       cancelAnimationFrame(this.rafId);
-      this.rafId = null;
     }
+    this.rafId = null;
   }
 
   /**
@@ -157,6 +158,10 @@ export class RAFScheduler {
    * Internal: Schedule next frame
    */
   private scheduleFrame(): void {
+    if (typeof requestAnimationFrame !== 'function') {
+      this.isRunning = false;
+      return;
+    }
     this.rafId = requestAnimationFrame((timestamp) => this.onFrame(timestamp));
   }
 

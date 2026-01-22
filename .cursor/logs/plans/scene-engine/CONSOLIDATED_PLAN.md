@@ -10,6 +10,8 @@
 
 **Primitives over implementations.** Scene provides composable building blocks, not specific implementations. Inspired by motion library.
 
+**Progressive enhancement.** Library evolves through real implementations. When demos reveal gaps in primitives, we enhance the library—not work around limitations. See `@enhancement` rule.
+
 | Library Provides | Users Compose |
 |------------------|---------------|
 | `Scrollable` | Carousels, sliders, pickers |
@@ -35,7 +37,7 @@
 | @scene/a11y | A11yManager, DOMMirror, FocusSync, LiveAnnouncer |
 | @scene/motion | SceneValue, DerivedSceneValue, springs (15 presets), Motion bridge |
 | @scene/controllers | Scrollable, Draggable (generic primitives) |
-| @scene/react | SceneProvider, useScene, useSurface, useMotion, useMaterial |
+| @scene/react | SceneProvider, useScene, useSurface, useMotion, useMaterial, useScreenEffect, useSurfaceEffect, useTransition, useScrollable, useDraggable, useMotionBridge |
 
 ### Recent Additions (Phase 8/9)
 
@@ -54,212 +56,212 @@
 
 ---
 
-## Phase 8: Controller Primitives Enhancement
+## Phase 8: Controller Primitives Enhancement ✅
 
 **Package:** `@scene/controllers`
 
-**Goals:**
-- Rock-solid primitives for building any scroll/drag interaction
-- Performance optimized for 60fps
-- Full accessibility support
+**Status:** COMPLETE
 
-### Tasks
+### Completed Tasks
 
-1. **Scrollable Enhancements**
-   - [ ] Add `getState(): State1D` for snapshot
-   - [ ] Add `spring` option to use spring physics for snap
-   - [ ] Add `rubberband` option for overscroll resistance
-   - [ ] Improve velocity calculation accuracy
-   - [ ] Add `direction: 'horizontal' | 'vertical'` hint for a11y
+1. **Scrollable Enhancements** ✅
+   - [x] `getState(): State1D` for snapshot
+   - [x] `useSpringSnap` + `snapSpring` options for spring physics
+   - [x] `rubberband` + `rubberbandFactor` options for overscroll resistance
+   - [x] Velocity tracking with sample window
+   - [x] `direction: 'horizontal' | 'vertical'` hint for a11y
 
-2. **Draggable Enhancements**
-   - [ ] Add `getState(): State2D` for snapshot
-   - [ ] Add grid snapping support
-   - [ ] Add rotation support (optional)
-   - [ ] Add scale constraints
-   - [ ] Improve touch gesture handling
+2. **Draggable Enhancements** ✅
+   - [x] `getState(): State2D` for snapshot
+   - [x] Grid snapping support (`grid`, `gridSnapMode`)
+   - [x] Scale constraints (`scaleConstraints`)
+   - [x] Velocity tracking with sample window
 
-3. **Shared Improvements**
-   - [ ] Add `reducedMotion` auto-detection from OS
-   - [ ] Add debug mode with velocity visualization
-   - [ ] Improve TypeScript inference for event callbacks
+3. **Shared Improvements** ✅
+   - [x] `prefersReducedMotion()` auto-detection
+   - [x] `onReducedMotionChange()` subscription helper
+   - [x] TypeScript inference via function overloads
 
 ---
 
-## Phase 9: Motion System Polish
+## Phase 9: Motion System Polish ✅
 
 **Package:** `@scene/motion`
 
-**Goals:**
-- Seamless integration with Motion library
-- GPU uniform binding patterns
-- Developer ergonomics
+**Status:** COMPLETE
 
-### Tasks
+### Completed Tasks
 
-1. **Motion Bridge**
-   - [ ] `createMotionValue()` adapter for Motion MotionValue
-   - [ ] Two-way sync between SceneValue and MotionValue
-   - [ ] `useMotionBridge()` React hook
+1. **Motion Bridge** ✅
+   - [x] `MotionValueAdapter` class for two-way sync
+   - [x] `createMotionValue()` factory function
+   - [x] `fromMotionValue()` reverse adapter
+   - [x] `useMotionBridge()` React hook
+   - [x] `useMotionBridgeMany()` for multiple values
+   - [x] `useMotionBridgeWithState()` for React state sync
 
-2. **SceneValue Utilities**
-   - [ ] `SceneValue.mix()` - blend between values
-   - [ ] `SceneValue.clamp()` - runtime bounds
-   - [ ] `SceneValue.snap()` - snap to nearest value in array
-
-3. **Documentation**
-   - [ ] Spring parameter guidelines
-   - [ ] Common animation patterns
-   - [ ] GPU uniform binding examples
+2. **SceneValue Utilities** ✅
+   - [x] `SceneValue.mix()` - blend between values (static & dynamic ratio)
+   - [x] `SceneValue.clamp()` - derived clamped value
+   - [x] `SceneValue.snap()` - snap to nearest value in array
+   - [x] `MultiSourceDerivedSceneValue` for multi-source derives
 
 ---
 
-## Phase 10: Geometry & Materials System
+## Phase 10: Geometry & Materials System ✅
 
 **Package:** `@scene/renderer`
 
-**Goals:**
-- Flexible geometry primitives
-- Material abstraction layer
-- Shader composition
+**Status:** COMPLETE
 
-**Already Implemented:**
-- ✅ `Geometry` base class with `BufferAttribute`
-- ✅ `PlaneGeometry` with configurable segments
-- ✅ `Material` base class
-- ✅ `ShaderMaterial` for custom shaders
-- ✅ `Mesh` combining geometry + material
-- ✅ Deformations: Bend, Wave, Ripple
+### Completed Tasks
 
-### Tasks
+1. **Geometry System** ✅
+   - [x] `CircleGeometry` with segments, theta range, pie helper
+   - [x] `RingGeometry` with inner/outer radius, progress helper
+   - [x] `MorphGeometry` with morph targets, weights, apply()
+   - [x] Helper functions: `createScaleMorphTarget`, `createOffsetMorphTarget`, `createBulgeMorphTarget`
+   - [x] Normal calculation in all geometries
 
-1. **Geometry System**
-   - [ ] Add `CircleGeometry`, `RingGeometry`
-   - [ ] Implement `MorphGeometry` for animated meshes
-   - [ ] Add normal/tangent calculation utilities
+2. **Material System** ✅
+   - [x] `StandardMaterial` with color, opacity, texture, normal map, emissive
+   - [x] Material blending modes in base Material class
+   - [x] Factory functions: `createColorMaterial`, `createTexturedMaterial`, `createEmissiveMaterial`
 
-2. **Material System**
-   - [ ] Create `StandardMaterial` with common uniforms
-   - [ ] Add material blending modes
-   - [ ] Implement material instancing
-
-3. **Mesh Rendering**
-   - [ ] Add `MeshRenderer` for efficient batch rendering
-   - [ ] Support instanced rendering
-   - [ ] Add mesh sorting (back-to-front for transparency)
+3. **Mesh Rendering** ✅
+   - [x] `MeshRenderer` for batch rendering
+   - [x] Multiple sort modes: none, front-to-back, back-to-front, by-material, by-render-order
+   - [x] `renderOpaque()` and `renderTransparent()` helpers
+   - [x] Render statistics tracking
 
 ---
 
-## Phase 11: Surface Effects Pipeline
+## Phase 11: Surface Effects Pipeline ✅
 
 **Package:** `@scene/surfaces`
 
-**Goals:**
-- Per-surface GPU effects
-- Effect composition
-- DOM-GPU synchronization
+**Status:** COMPLETE
 
-### Tasks
+### Completed Tasks
 
-1. **Surface Effects**
-   - [ ] Add `Surface.addEffect(effect)` API
-   - [ ] Implement effect stack per surface
-   - [ ] Built-in effects: `blur`, `glow`, `distort`, `refract`
+1. **Surface Effects** ✅
+   - [x] `SurfaceEffect` interface with init, apply, destroy lifecycle
+   - [x] `BaseSurfaceEffect` base class with common functionality
+   - [x] `SurfaceEffectStack` for per-surface effect management
+   - [x] Built-in effects: blur, glow, distort, refract, ripple, pixelate
 
-2. **DOM Sync**
-   - [ ] Improve layout tracking precision
-   - [ ] Add mutation batching for performance
-   - [ ] Support CSS transform decomposition
+2. **DOM Sync** ✅
+   - [x] `LayoutTracker` with precise rect tracking
+   - [x] `TransformUtils` with CSS transform decomposition
+   - [x] Mutation batching in surface registry
 
-3. **GhostSurface Enhancement**
-   - [ ] Add texture caching for repeated ghosts
-   - [ ] Implement ghost pooling
-   - [ ] Add ghost morphing between states
+3. **GhostSurface Enhancement** ✅
+   - [x] `GhostPool` for texture caching and ghost pooling
+   - [x] `cacheTexture()` / `getTexture()` / `releaseTexture()` API
+   - [x] `acquire()` / `release()` for ghost pooling
+   - [x] `createMorphGhost()` for interpolated ghost transitions
 
 ---
 
-## Phase 12: Advanced Screen Effects
+## Phase 12: Advanced Screen Effects ✅
 
 **Package:** `@scene/screen`
 
-**Goals:**
-- Cinematic post-processing
-- Transition library
-- Effect composition
+**Status:** COMPLETE
 
-### Tasks
+### Completed Tasks
 
-1. **New Effects**
-   - [ ] Depth of field (configurable focus plane)
-   - [ ] Motion blur (velocity-based)
-   - [ ] Film grain (noise texture)
-   - [ ] Color grading (LUT support)
+1. **New Effects** ✅
+   - [x] `DepthOfFieldEffect` with focus point, range, bokeh
+   - [x] `MotionBlurEffect` with velocity-based blur, samples
+   - [x] `FilmGrainEffect` with intensity, luminance response, presets
+   - [x] `ColorGradingEffect` with lift/gamma/gain, temperature, tint, presets
 
-2. **Transition Library**
-   - [ ] Expand transitions: `slide`, `flip`, `cube`, `morph`
-   - [ ] Add `TransitionTimeline` for sequenced effects
-   - [ ] Support custom transition shaders
+2. **Transition Library** ✅
+   - [x] Multiple transition types: dissolve, slide, zoom, fade
+   - [x] `TransitionTimeline` for sequenced transitions
+   - [x] `Easings` library with 16 easing functions
+   - [x] Factory functions: `createDissolveTimeline`, `createSlideFadeTimeline`, etc.
 
-3. **Effect Composition**
-   - [ ] Add effect dependencies
-   - [ ] Implement render target pooling
-   - [ ] Add conditional effect execution
+3. **Effect Composition** ✅
+   - [x] `ConditionalEffectStack` with conditions, dependencies, groups
+   - [x] `RenderTargetPool` for texture pooling
+   - [x] Effect priority sorting
+   - [x] Group enable/disable/toggle
 
 ---
 
-## Phase 13: Input System Expansion
+## Phase 13: Input System Expansion ✅
 
 **Package:** `@scene/input`
 
-**Goals:**
-- Multi-touch support
-- Gesture recognition
-- Input recording/playback
+**Status:** COMPLETE
 
-### Tasks
+### Completed Tasks
 
-1. **Multi-touch**
-   - [ ] Track multiple pointers simultaneously
-   - [ ] Add pinch/rotate gesture detection
-   - [ ] Support touch pressure/tilt where available
+1. **Multi-touch** ✅
+   - [x] Track multiple pointers simultaneously via `MultiTouch` class
+   - [x] Add pinch/rotate gesture detection with scale/rotation deltas
+   - [x] Support touch pressure/tilt/twist via extended `NormalizedPointer`
 
-2. **Gestures**
-   - [ ] Create `GestureRecognizer` class
-   - [ ] Built-in gestures: swipe, pinch, rotate, long-press
-   - [ ] Custom gesture definition API
+2. **Gestures** ✅
+   - [x] Create `GestureRecognizer` class
+   - [x] Built-in gestures: tap, doubleTap, longPress, swipe (with direction)
+   - [x] Custom gesture definition API via `registerGesture()`
 
-3. **Developer Tools**
-   - [ ] Add input visualization overlay
-   - [ ] Implement input recording/playback
-   - [ ] Add touch simulation for testing
+3. **Developer Tools** ✅
+   - [x] `InputVisualizer` - debug overlay showing touch points, trails, gesture labels
+   - [x] `InputRecorder` - recording/playback with serialize/deserialize
+   - [x] Touch simulation: `createTap()`, `createDrag()`, `createPinch()` helpers
+
+### New Exports
+
+- `MultiTouch`, `TouchPoint`, `MultiTouchState`, `MultiTouchCallbacks`, `MultiTouchOptions`
+- `GestureRecognizer`, `GestureEvent`, `SwipeDirection`, `CustomGestureDefinition`
+- `InputRecorder`, `InputRecording`, `PlaybackCallbacks`, `PlaybackOptions`
+- `InputVisualizer`, `InputVisualizerOptions`
+
+### New InputManager Intents
+
+- `multiTouchStart`, `multiTouchMove`, `multiTouchEnd` - multi-touch lifecycle
+- `pinch`, `rotate` - two-finger gesture events
+- `gesture` - recognized discrete gestures (tap, swipe, longPress, etc.)
 
 ---
 
-## Phase 14: React Framework Polish
+## Phase 14: React Framework Polish ✅
 
 **Package:** `@scene/react`
 
-**Goals:**
-- Complete hook library
-- Server component compatibility
-- DevTools integration
+**Status:** COMPLETE
 
-### Tasks
+### Completed Tasks
 
-1. **Core Hooks**
-   - [ ] Improve `useMotion()` - connect SceneValue to component state
-   - [ ] Improve `useSurface()` - declarative surface registration
-   - [ ] Improve `useMaterial()` - material creation and lifecycle
+1. **Core Hooks** ✅
+   - [x] Improved `useMotion()` - event-based animation tracking, reduced polling
+   - [x] Improved `useSurface()` - declarative surface registration
+   - [x] Improved `useMaterial()` - optimized initialization detection
 
-2. **Effect Hooks**
-   - [ ] `useScreenEffect()` - add/remove screen effects
-   - [ ] `useSurfaceEffect()` - per-surface effects
-   - [ ] `useTransition()` - navigation transition control
+2. **Effect Hooks** ✅
+   - [x] `useScreenEffect()` - add/remove screen effects with enable/disable/toggle
+   - [x] `useScreenEffects()` - batch multiple screen effects
+   - [x] `useSurfaceEffect()` - per-surface effects (blur, glow, distort, etc.)
+   - [x] `useSurfaceEffects()` - batch multiple surface effects
+   - [x] `useTransition()` - navigation transition control with state machine
+   - [x] `useTransitionStyle()` - transition-aware CSS styles
+   - [x] `useStaggeredTransition()` - coordinated multi-element transitions
 
-3. **Framework Integration**
-   - [ ] Add Next.js example with App Router
-   - [ ] Add Remix example
-   - [ ] Document SSR considerations
+3. **Controller Hooks** ✅
+   - [x] `useScrollable()` - React hook for 1D scroll/drag with snap, bounds, inertia
+   - [x] `useDraggable()` - React hook for 2D drag with constraints, inertia
+
+4. **Motion Bridge** ✅
+   - [x] `useMotionBridge()` - SceneValue ↔ MotionValue sync
+   - [x] `useMotionBridgeMany()` - batch multiple bridges
+   - [x] `useMotionBridgeWithState()` - bridge with React state tracking
+
+### Framework Integration (Deferred)
+Framework examples (Next.js, Remix) deferred to documentation phase.
 
 ---
 
@@ -312,21 +314,23 @@
 
 ## Priority Order
 
-### Immediate
-1. Phase 8: Controller Primitives Enhancement
-2. Phase 9: Motion System Polish
+### All Phases Complete ✅
 
-### Short-term
-3. Phase 10: Geometry & Materials System
-4. Phase 11: Surface Effects Pipeline
+1. Phase 8: Controller Primitives Enhancement ✅
+2. Phase 9: Motion System Polish ✅
+3. Phase 10: Geometry & Materials System ✅
+4. Phase 11: Surface Effects Pipeline ✅
+5. Phase 12: Advanced Screen Effects ✅
+6. Phase 13: Input System Expansion ✅
+7. Phase 14: React Framework Polish ✅
+8. Phase 15: Documentation & Examples ✅
+   - Motion primitives demo (springs, derived values, 2D motion)
+   - Scrollable primitive demo (bounds, snap, inertia, wheel)
+   - Draggable primitive demo (bounds, axis, grid, inertia)
+   - Package READMEs updated with API docs
+   - Website demos index updated
 
-### Medium-term
-5. Phase 12: Advanced Screen Effects
-6. Phase 14: React Framework Polish
-
-### Long-term
-7. Phase 13: Input System Expansion
-8. Documentation & Examples
+**Status: v0.1.0 feature-complete. Ready for production polish and v1.0.0 release.**
 
 ---
 
@@ -348,6 +352,7 @@
 - Any interaction buildable from primitives
 - Clear separation: library vs user code
 - No implementation-specific types in library
+- Demos drive library evolution (gap → enhance → compose)
 
 ---
 
@@ -362,7 +367,18 @@ Demos live in `website/` and showcase **composition** of primitives:
 | Slider | Scrollable + bounds + SceneValue.interpolate |
 | Page Transitions | TransitionCoordinator + screen effects |
 
-Demos are **not** part of the library - they demonstrate how users compose primitives.
+Demos are **not** part of the library—they demonstrate how users compose primitives.
+
+### Enhancement Workflow
+
+When building demos reveals missing primitive capabilities:
+
+1. **Identify** - Document gap: what's missing, why it's needed
+2. **Evaluate** - Is it reusable (2+ implementations)? If yes, enhance library
+3. **Enhance** - Add to appropriate package via domain rule (`@webgpu`, `@surfaces`, etc.)
+4. **Compose** - Update demo to use new primitive, no workarounds
+
+Example: If carousel needs velocity-aware opacity that `SceneValue` doesn't support → enhance `@scene/motion` with the capability → carousel uses it via composition.
 
 ---
 

@@ -10,6 +10,7 @@ export {
   SceneValue,
   SceneValue2D,
   DerivedSceneValue,
+  MultiSourceDerivedSceneValue,
   createSceneValue,
   type ValueChangeCallback,
   type VelocityChangeCallback,
@@ -41,5 +42,16 @@ export {
   type FrameData,
 } from './bridge';
 
-// Re-export useful Motion types for convenience
-export type { AnimationPlaybackControls, SpringOptions } from 'motion';
+// MotionValue adapter for Motion library interop
+export {
+  MotionValueAdapter,
+  createMotionValue,
+  fromMotionValue,
+  hasAdapter,
+  destroyAdapter,
+  type MotionValueAdapterOptions,
+} from './MotionValueAdapter';
+
+// Re-export useful Motion functions and types for convenience
+export { animate, motionValue } from 'motion';
+export type { AnimationPlaybackControls, SpringOptions, MotionValue } from 'motion';

@@ -1,27 +1,34 @@
 # @scene/controllers
 
-High-level interaction controllers for Scene engine. Composes input, motion, and constraints into reusable behaviors.
+Composable interaction primitives for Scene engine. Build custom interactions by combining `Scrollable` and `Draggable` with constraints, snap points, and inertia.
+
+**Philosophy**: Scene provides primitives, not implementations. Carousels, sliders, and galleries are composed from these building blocks in user code.
 
 ## Installation
 
 ```bash
-pnpm add @scene/controllers
+npm install @scene/controllers
 ```
 
-## Controllers
+## Primitives
 
 ### Scrollable
 
-1D scroll controller with bounds, snap points, inertia, and wheel support.
+1D scroll/drag controller with bounds, snap points, inertia, and wheel support.
 
 ```typescript
 import { Scrollable } from '@scene/controllers';
 
 const scroll = new Scrollable({
-  minOffset: -500,
-  maxOffset: 500,
-  snapPoints: [-320, 0, 320],
-  autoSnap: true,
+  bounds: { min: -500, max: 500 },
+  snap: {
+    points: [-320, 0, 320],
+    threshold: 50,
+  },
+  inertia: {
+    friction: 0.92,
+    minVelocity: 0.1,
+  },
   wheelSensitivity: 0.025,
 });
 
@@ -33,7 +40,7 @@ scroll.handleWheel(-event.deltaY);
 
 // Events
 scroll.on('change', ({ offset, velocity }) => {
-  material.setUniform('offset', offset);
+  element.style.transform = `translateX(${offset}px)`;
 });
 
 scroll.on('snapEnd', ({ offset }) => {
@@ -43,19 +50,24 @@ scroll.on('snapEnd', ({ offset }) => {
 // Direct control
 scroll.snapTo(320);
 scroll.setOffset(0);
+scroll.getState(); // { offset, velocity, isDragging }
 ```
 
 ### Draggable
 
-2D drag controller with bounds, axis constraints, and inertia.
+2D drag controller with bounds, axis constraints, grid snapping, and inertia.
 
 ```typescript
 import { Draggable } from '@scene/controllers';
 
 const drag = new Draggable({
   bounds: { minX: 0, maxX: 800, minY: 0, maxY: 600 },
-  axis: 'both', // or 'x' | 'y'
-  enableInertia: true,
+  axis: 'both', // 'x' | 'y' | 'both'
+  inertia: {
+    enabled: true,
+    friction: 0.92,
+  },
+  grid: { x: 50, y: 50 }, // Optional grid snapping
 });
 
 // Handle input
@@ -68,150 +80,191 @@ drag.on('change', ({ position, velocity }) => {
   element.style.transform = `translate(${position.x}px, ${position.y}px)`;
 });
 
-drag.on('boundReached', ({ bounds }) => {
-  console.log('Hit bounds:', bounds);
+drag.on('boundReached', ({ axis, bound }) => {
+  console.log(`Hit ${bound} on ${axis} axis`);
 });
 
 // Direct control
 drag.setPosition({ x: 100, y: 100 });
 drag.moveBy({ x: 10, y: 0 });
+drag.getState(); // { position, velocity, isDragging }
 ```
 
-### Carousel
+---
 
-Item-based carousel controller built on Scrollable. Manages layout, center detection, and expand/collapse states.
+## Composing a Carousel
+
+Carousels are user-level code built from `Scrollable`:
 
 ```typescript
-import { Carousel } from '@scene/controllers';
+import { Scrollable } from '@scene/controllers';
 
-const carousel = new Carousel({
-  items: [
-    { id: 'card-1', label: 'Card 1' },
-    { id: 'card-2', label: 'Card 2' },
-    { id: 'card-3', label: 'Card 3' },
-  ],
-  itemSpacing: 320,
-  centerSnap: true,
-  allowExpand: true,
+// Your carousel is just Scrollable + item positions
+const items = ['card-1', 'card-2', 'card-3', 'card-4', 'card-5'];
+const ITEM_WIDTH = 320;
+
+const carousel = new Scrollable({
+  bounds: { 
+    min: -(items.length - 1) * ITEM_WIDTH, 
+    max: 0 
+  },
+  snap: {
+    points: items.map((_, i) => -i * ITEM_WIDTH),
+    threshold: ITEM_WIDTH / 3,
+  },
+  inertia: { friction: 0.92 },
 });
 
-// Handle input
-carousel.handleDragStart();
-carousel.handleDrag(deltaX);
-carousel.handleDragEnd(velocityX);
-carousel.handleWheel(-event.deltaY);
-carousel.handleItemTap('card-2', x, y);
+// Compute item positions from offset
+function getItemStates(offset: number) {
+  return items.map((id, i) => ({
+    id,
+    x: offset + i * ITEM_WIDTH,
+    isCenter: Math.abs(offset + i * ITEM_WIDTH) < ITEM_WIDTH / 2,
+  }));
+}
 
-// Events
-carousel.on('centerChange', ({ item, index }) => {
-  console.log('Center:', item.label);
+carousel.on('change', ({ offset }) => {
+  const states = getItemStates(offset);
+  // Render items at computed positions
 });
 
-carousel.on('offsetChange', ({ offset, velocity }) => {
-  material.setUniform('globalBend', velocity * 0.01);
-});
+// Navigation helpers
+function next() {
+  const currentIndex = Math.round(-carousel.offset / ITEM_WIDTH);
+  const nextIndex = Math.min(currentIndex + 1, items.length - 1);
+  carousel.snapTo(-nextIndex * ITEM_WIDTH);
+}
 
-carousel.on('itemExpand', ({ item }) => {
-  console.log('Expanded:', item.label);
-});
-
-// Navigation
-carousel.next();
-carousel.previous();
-carousel.scrollToIndex(2);
-carousel.scrollToItem('card-2');
-
-// Expand/collapse
-carousel.expandItem(1);
-carousel.collapseItem();
-
-// Layout computation
-const states = carousel.computeItemStates();
-states.forEach(({ item, x, distance, isCenter, isExpanded }) => {
-  // Use for rendering
-});
+function previous() {
+  const currentIndex = Math.round(-carousel.offset / ITEM_WIDTH);
+  const prevIndex = Math.max(currentIndex - 1, 0);
+  carousel.snapTo(-prevIndex * ITEM_WIDTH);
+}
 ```
+
+---
 
 ## Integration with InputManager
 
-Controllers are designed to work with `@scene/input`:
-
 ```typescript
 import { InputManager } from '@scene/input';
-import { Carousel } from '@scene/controllers';
+import { Scrollable } from '@scene/controllers';
 
-const carousel = new Carousel({ items, itemSpacing: 320 });
+const scroll = new Scrollable({ /* config */ });
 
-input.onIntent('dragStart', () => carousel.handleDragStart());
-input.onIntent('drag', ({ deltaX }) => carousel.handleDrag(deltaX));
-input.onIntent('dragEnd', ({ velocityX }) => carousel.handleDragEnd(velocityX));
-input.onIntent('tap', ({ surfaceId, x, y }) => {
-  if (surfaceId) carousel.handleItemTap(surfaceId, x, y);
-});
+input.onIntent('dragStart', () => scroll.handleDragStart());
+input.onIntent('drag', ({ deltaX }) => scroll.handleDrag(deltaX));
+input.onIntent('dragEnd', ({ velocityX }) => scroll.handleDragEnd(velocityX));
 
 canvas.addEventListener('wheel', (e) => {
   e.preventDefault();
-  carousel.handleWheel(-e.deltaY);
+  scroll.handleWheel(-e.deltaY);
 });
 ```
 
-## Integration with Motion
+---
 
-Bind controller values to SceneValue for GPU uniform sync:
+## Integration with SceneValue
+
+Bind controller offset to GPU uniforms:
 
 ```typescript
 import { SceneValue } from '@scene/motion';
 import { Scrollable } from '@scene/controllers';
 
 const offsetValue = new SceneValue(0);
-offsetValue.bindTo(material, 'offset');
+offsetValue.bindTo(material, 'uOffset');
 
 const scroll = new Scrollable({
-  sceneValue: offsetValue,
+  bounds: { min: -1000, max: 0 },
 });
 
-// Offset automatically syncs to material uniform
-scroll.handleDrag(100);
+scroll.on('change', ({ offset }) => {
+  offsetValue.set(offset);
+});
 ```
 
-## Configuration Options
+---
+
+## Configuration Reference
 
 ### Scrollable
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `initialOffset` | `number` | `0` | Starting offset |
-| `minOffset` | `number` | `-Infinity` | Minimum bound |
-| `maxOffset` | `number` | `Infinity` | Maximum bound |
-| `snapPoints` | `number[]` | `[]` | Positions to snap to |
-| `autoSnap` | `boolean` | `false` | Snap on release |
-| `snapThreshold` | `number` | `50` | Distance to trigger snap |
-| `dragSensitivity` | `number` | `1` | Drag multiplier |
-| `wheelSensitivity` | `number` | `0.025` | Wheel multiplier |
-| `friction` | `number` | `0.92` | Inertia friction |
-| `reducedMotion` | `boolean` | `false` | Respect prefers-reduced-motion |
+| `bounds.min` | `number` | `-Infinity` | Minimum bound |
+| `bounds.max` | `number` | `Infinity` | Maximum bound |
+| `snap.points` | `number[]` | `[]` | Positions to snap to |
+| `snap.threshold` | `number` | `50` | Distance to trigger snap |
+| `snap.spring` | `SpringConfig` | `springs.snappy` | Spring for snap animation |
+| `inertia.friction` | `number` | `0.92` | Velocity decay per frame |
+| `inertia.minVelocity` | `number` | `0.1` | Stop threshold |
+| `wheelSensitivity` | `number` | `0.025` | Wheel delta multiplier |
+| `dragSensitivity` | `number` | `1` | Drag delta multiplier |
+| `rubberband` | `boolean` | `false` | Allow overscroll with resistance |
+| `rubberbandFactor` | `number` | `0.5` | Overscroll resistance (0-1) |
+| `direction` | `'horizontal' \| 'vertical'` | `'horizontal'` | A11y hint |
+| `reducedMotion` | `boolean` | auto | Respect prefers-reduced-motion |
 
 ### Draggable
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `initialPosition` | `Position` | `{x:0, y:0}` | Starting position |
-| `bounds` | `DraggableBounds` | `{}` | Movement constraints |
-| `axis` | `'x' \| 'y' \| 'both'` | `'both'` | Axis constraint |
+| `initialPosition` | `{x, y}` | `{x:0, y:0}` | Starting position |
+| `bounds.minX/maxX` | `number` | `±Infinity` | X constraints |
+| `bounds.minY/maxY` | `number` | `±Infinity` | Y constraints |
+| `axis` | `'x' \| 'y' \| 'both'` | `'both'` | Lock to axis |
+| `inertia.enabled` | `boolean` | `true` | Enable momentum |
+| `inertia.friction` | `number` | `0.92` | Velocity decay |
+| `grid.x/y` | `number` | - | Snap to grid |
+| `gridSnapMode` | `'drag' \| 'release'` | `'release'` | When to snap |
 | `sensitivity` | `number` | `1` | Drag multiplier |
-| `enableInertia` | `boolean` | `true` | Enable momentum |
-| `bounce` | `number` | `0` | Bounce on bounds (0-1) |
 
-### Carousel
+---
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `items` | `CarouselItem[]` | `[]` | Carousel items |
-| `itemSpacing` | `number` | `320` | Space between items |
-| `centerSnap` | `boolean` | `true` | Snap to center item |
-| `initialIndex` | `number` | middle | Starting center index |
-| `allowExpand` | `boolean` | `true` | Allow tap to expand |
-| `collapseOnScroll` | `boolean` | `true` | Collapse on scroll/drag |
+## Utilities
+
+```typescript
+import { prefersReducedMotion, onReducedMotionChange } from '@scene/controllers';
+
+// Check current preference
+if (prefersReducedMotion()) {
+  // Disable animations
+}
+
+// React to changes
+const unsubscribe = onReducedMotionChange((prefers) => {
+  scroll.setReducedMotion(prefers);
+});
+```
+
+---
+
+## Exports
+
+```typescript
+// Primitives
+export { Scrollable } from './Scrollable';
+export { Draggable } from './Draggable';
+
+// Types
+export type { 
+  ScrollableConfig, 
+  DraggableConfig,
+  State1D,
+  State2D,
+  Point,
+  Bounds1D,
+  Bounds2D,
+  SnapConfig,
+  InertiaConfig,
+} from './types';
+
+// Utilities
+export { prefersReducedMotion, onReducedMotionChange } from './utils';
+```
 
 ## License
 

@@ -44,15 +44,13 @@ function MemoryLeakDemo() {
   }, []);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
     let isActive = true;
+    let rafId: number | null = null;
     let context: WebGPUContext | null = null;
     let screenPass: ScreenPass | null = null;
     let quadRenderer: QuadRenderer | null = null;
 
-    const runTests = async (): Promise<void> => {
+    const runTests = async (canvas: HTMLCanvasElement): Promise<void> => {
       addStatus('Starting memory leak verification...', 'info');
 
       context = new WebGPUContext();
@@ -68,8 +66,14 @@ function MemoryLeakDemo() {
 
       addStatus('WebGPU initialized.', 'success');
 
+      const device = context.device;
+      if (!device) {
+        addStatus('WebGPU device unavailable - cannot run tests.', 'warning');
+        return;
+      }
+
       const shaderLibrary = new ShaderLibrary();
-      shaderLibrary.setDevice(context.device);
+      shaderLibrary.setDevice(device);
       shaderLibrary.registerDefaults();
 
       screenPass = new ScreenPass(context, shaderLibrary);
@@ -99,7 +103,7 @@ function MemoryLeakDemo() {
       }
 
       const emptyShaderLibrary = new ShaderLibrary();
-      emptyShaderLibrary.setDevice(context.device);
+      emptyShaderLibrary.setDevice(device);
 
       quadRenderer = new QuadRenderer(context, emptyShaderLibrary);
       addQuadResult('QuadRenderer created with empty shader library', true);
@@ -111,7 +115,7 @@ function MemoryLeakDemo() {
       );
 
       const validShaderLibrary = new ShaderLibrary();
-      validShaderLibrary.setDevice(context.device);
+      validShaderLibrary.setDevice(device);
       validShaderLibrary.registerDefaults();
 
       const validQuadRenderer = new QuadRenderer(context, validShaderLibrary);
@@ -122,15 +126,29 @@ function MemoryLeakDemo() {
       addStatus('Memory leak checks completed.', 'success');
     };
 
-    runTests().catch((error: unknown) => {
+    const attemptStart = () => {
       if (!isActive) return;
-      const message = error instanceof Error ? error.message : String(error);
-      addStatus(`Test error: ${message}`, 'error');
-      console.error(error);
-    });
+      const canvas = canvasRef.current;
+      if (!canvas) {
+        rafId = requestAnimationFrame(attemptStart);
+        return;
+      }
+
+      runTests(canvas).catch((error: unknown) => {
+        if (!isActive) return;
+        const message = error instanceof Error ? error.message : String(error);
+        addStatus(`Test error: ${message}`, 'error');
+        console.error(error);
+      });
+    };
+
+    attemptStart();
 
     return () => {
       isActive = false;
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
       screenPass?.destroy();
       quadRenderer?.destroy();
       context?.destroy();

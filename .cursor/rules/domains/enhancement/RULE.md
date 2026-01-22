@@ -1,0 +1,84 @@
+---
+description: "Progressive library enhancement workflow for demos and implementations"
+alwaysApply: false
+globs:
+  - "demos/**"
+  - "website/src/lib/**"
+  - "website/src/routes/demos/**"
+---
+
+# Progressive Enhancement
+
+`[rule: enhancement]` — Workflow for evolving library primitives through real-world implementations.
+
+## Allowed Paths
+- `demos/`
+- `website/src/lib/`
+- `website/src/routes/demos/`
+
+## Core Principle
+
+When building user-level implementations (carousels, galleries, sliders), **gaps in library primitives become enhancement opportunities**. The library evolves to support real needs, not speculative features.
+
+## Enhancement Workflow
+
+### 1. Identify Gap
+When implementing a feature and the primitives don't support a needed pattern:
+- Document the gap: what's missing, why it's needed
+- Determine if it's a true primitive (reusable) or implementation-specific
+
+### 2. Enhance Library (if primitive)
+If the gap represents a reusable pattern:
+- Add capability to appropriate package (`controllers`, `motion`, `surfaces`, etc.)
+- Keep it generic—no implementation-specific logic in library code
+- Update exports and types
+
+### 3. Compose in Implementation
+After enhancing:
+- Use the new primitive in demo/implementation code
+- Demo code remains pure composition, no workarounds
+
+## Enhancement Categories
+
+| Gap Type | Target Package | Example |
+|----------|----------------|---------|
+| Motion/animation primitive | `@scene/motion` | Derived values, spring presets |
+| Interaction pattern | `@scene/controllers` | Snap behaviors, gesture recognition |
+| DOM tracking capability | `@scene/surfaces` | Element group tracking, intersection |
+| GPU effect | `@scene/renderer`, `@scene/screen` | Deformations, post-effects |
+| A11y pattern | `@scene/a11y` | Focus management, announcements |
+
+## Rules
+
+### MUST
+- Keep implementation code (demos) as pure primitive composition
+- Enhance library when 2+ implementations would benefit
+- Delegate library changes to appropriate domain rule (`@webgpu`, `@surfaces`, etc.)
+- Test enhanced primitives in isolation before using in implementation
+
+### MUST NOT
+- Add implementation-specific logic to library packages
+- Work around missing primitives with complex demo code
+- Enhance library for single-use patterns (keep in demo)
+- Break existing primitive APIs without migration path
+
+### MAY
+- Add optional parameters to existing primitives
+- Create new primitives when patterns emerge
+- Extend types to support new use cases
+
+## DOM Mirror Enhancement
+
+When implementations need GPU effects tied to DOM state:
+1. Surface tracking provides rect/visibility via `@scene/surfaces`
+2. Motion values drive effect intensity via `@scene/motion`
+3. Renderer applies effects via `@scene/renderer`
+
+Enhance each layer independently—implementations compose them.
+
+## Checklist
+- [ ] Gap documented before enhancement
+- [ ] Primitive is generic, not implementation-specific
+- [ ] Library change delegated to domain rule
+- [ ] Demo code uses only composition
+- [ ] Existing APIs preserved or migrated

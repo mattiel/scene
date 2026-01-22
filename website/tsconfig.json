@@ -11,6 +11,9 @@
     "baseUrl": ".",
     "paths": {
       "@scene/core": ["../packages/core/src/index.ts"],
+      "@scene/controllers": ["../packages/controllers/src/index.ts"],
+      "@scene/controllers/*": ["../packages/controllers/src/*"],
+      "@scene/react": ["../packages/react/src/index.ts"],
       "@scene/surfaces": ["../packages/surfaces/src/index.ts"],
       "@scene/navigation": ["../packages/navigation/src/index.ts"],
       "@scene/input": ["../packages/input/src/index.ts"],

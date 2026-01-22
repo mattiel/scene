@@ -43,16 +43,14 @@ function EffectStackDemo() {
   }, []);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
     let isActive = true;
+    let rafId: number | null = null;
     let context: WebGPUContext | null = null;
     let screenPass: ScreenPass | null = null;
     let sourceTexture: GPUTexture | null = null;
     let animationTime = 0;
 
-    const initialize = async (): Promise<void> => {
+    const initialize = async (canvas: HTMLCanvasElement): Promise<void> => {
       addStatus('Initializing WebGPU...', 'info');
 
       context = new WebGPUContext();
@@ -68,8 +66,14 @@ function EffectStackDemo() {
 
       addStatus('WebGPU initialized.', 'success');
 
+      const device = context.device;
+      if (!device) {
+        addStatus('WebGPU device unavailable - demo cannot run.', 'warning');
+        return;
+      }
+
       const shaderLibrary = new ShaderLibrary();
-      shaderLibrary.setDevice(context.device);
+      shaderLibrary.setDevice(device);
       shaderLibrary.registerDefaults();
 
       screenPass = new ScreenPass(context, shaderLibrary);
@@ -102,7 +106,7 @@ function EffectStackDemo() {
       const rect = canvas.getBoundingClientRect();
       context.resize(rect.width, rect.height);
 
-      sourceTexture = context.device.createTexture({
+      sourceTexture = device.createTexture({
         size: [canvas.width, canvas.height],
         format: context.format ?? 'bgra8unorm',
         usage:
@@ -117,7 +121,7 @@ function EffectStackDemo() {
         if (!isActive || !context || !screenPass || !sourceTexture) return;
 
         animationTime += 0.016;
-        const commandEncoder = context.device.createCommandEncoder();
+        const commandEncoder = device.createCommandEncoder();
         const sourcePass = commandEncoder.beginRenderPass({
           colorAttachments: [
             {
@@ -136,7 +140,7 @@ function EffectStackDemo() {
         sourcePass.end();
 
         effectStack.execute(commandEncoder, sourceTexture);
-        context.device.queue.submit([commandEncoder.finish()]);
+        device.queue.submit([commandEncoder.finish()]);
 
         animationRef.current = requestAnimationFrame(render);
       };
@@ -144,15 +148,29 @@ function EffectStackDemo() {
       animationRef.current = requestAnimationFrame(render);
     };
 
-    initialize().catch((error: unknown) => {
+    const attemptStart = () => {
       if (!isActive) return;
-      const message = error instanceof Error ? error.message : String(error);
-      addStatus(`Error: ${message}`, 'error');
-      console.error(error);
-    });
+      const canvas = canvasRef.current;
+      if (!canvas) {
+        rafId = requestAnimationFrame(attemptStart);
+        return;
+      }
+
+      initialize(canvas).catch((error: unknown) => {
+        if (!isActive) return;
+        const message = error instanceof Error ? error.message : String(error);
+        addStatus(`Error: ${message}`, 'error');
+        console.error(error);
+      });
+    };
+
+    attemptStart();
 
     return () => {
       isActive = false;
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
       }

@@ -22,3 +22,22 @@ export {
   createFullscreenQuad,
   type PlaneGeometryConfig,
 } from './PlaneGeometry';
+
+export {
+  CircleGeometry,
+  type CircleGeometryConfig,
+} from './CircleGeometry';
+
+export {
+  RingGeometry,
+  type RingGeometryConfig,
+} from './RingGeometry';
+
+export {
+  MorphGeometry,
+  createScaleMorphTarget,
+  createOffsetMorphTarget,
+  createBulgeMorphTarget,
+  type MorphTarget,
+  type MorphGeometryConfig,
+} from './MorphGeometry';

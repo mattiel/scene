@@ -36,14 +36,12 @@ function MultiEffectStackDemo() {
   }, []);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
     let isActive = true;
+    let rafId: number | null = null;
     let context: WebGPUContext | null = null;
     let screenPass: ScreenPass | null = null;
 
-    const runTest = async (): Promise<void> => {
+    const runTest = async (canvas: HTMLCanvasElement): Promise<void> => {
       addStatus('Starting multi-effect stack test...', 'info');
 
       context = new WebGPUContext();
@@ -59,8 +57,14 @@ function MultiEffectStackDemo() {
 
       addStatus('WebGPU initialized.', 'success');
 
+      const device = context.device;
+      if (!device) {
+        addStatus('WebGPU device unavailable - test cannot run.', 'warning');
+        return;
+      }
+
       const shaderLibrary = new ShaderLibrary();
-      shaderLibrary.setDevice(context.device);
+      shaderLibrary.setDevice(device);
       shaderLibrary.registerDefaults();
 
       screenPass = new ScreenPass(context, shaderLibrary);
@@ -82,7 +86,7 @@ function MultiEffectStackDemo() {
       addResult(`Created blur effect: ${blurEffect}`, true);
       addResult(`Created vignette effect: ${vignetteEffect}`, true);
 
-      const sourceTexture = context.device.createTexture({
+      const sourceTexture = device.createTexture({
         size: [canvas.width, canvas.height],
         format: context.format ?? 'bgra8unorm',
         usage:
@@ -91,7 +95,7 @@ function MultiEffectStackDemo() {
           GPUTextureUsage.COPY_DST,
       });
 
-      const intermediateTexture = context.device.createTexture({
+      const intermediateTexture = device.createTexture({
         size: [canvas.width, canvas.height],
         format: context.format ?? 'bgra8unorm',
         usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT,
@@ -100,7 +104,7 @@ function MultiEffectStackDemo() {
       addResult('Created 1 intermediate texture', true);
 
       try {
-        const commandEncoder = context.device.createCommandEncoder();
+        const commandEncoder = device.createCommandEncoder();
         const clearPass = commandEncoder.beginRenderPass({
           colorAttachments: [
             {
@@ -120,7 +124,7 @@ function MultiEffectStackDemo() {
           [intermediateTexture]
         );
 
-        context.device.queue.submit([commandEncoder.finish()]);
+        device.queue.submit([commandEncoder.finish()]);
         addResult('Executed 2-effect stack with 1 intermediate texture', true);
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
@@ -134,7 +138,7 @@ function MultiEffectStackDemo() {
       addResult(`Created chromatic aberration effect: ${chromaticEffect}`, true);
 
       try {
-        const commandEncoder = context.device.createCommandEncoder();
+        const commandEncoder = device.createCommandEncoder();
         screenPass.executeStack(
           commandEncoder,
           [blurEffect, vignetteEffect, chromaticEffect],
@@ -147,21 +151,21 @@ function MultiEffectStackDemo() {
         addResult(`3-effect stack validation error: ${message}`, false);
       }
 
-      const intermediate2 = context.device.createTexture({
+      const intermediate2 = device.createTexture({
         size: [canvas.width, canvas.height],
         format: context.format ?? 'bgra8unorm',
         usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT,
       });
 
       try {
-        const commandEncoder = context.device.createCommandEncoder();
+        const commandEncoder = device.createCommandEncoder();
         screenPass.executeStack(
           commandEncoder,
           [blurEffect, vignetteEffect, chromaticEffect],
           sourceTexture,
           [intermediateTexture, intermediate2]
         );
-        context.device.queue.submit([commandEncoder.finish()]);
+        device.queue.submit([commandEncoder.finish()]);
         addResult('Executed 3-effect stack with 2 intermediate textures', true);
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
@@ -171,15 +175,29 @@ function MultiEffectStackDemo() {
       addStatus('Multi-effect stack tests completed.', 'success');
     };
 
-    runTest().catch((error: unknown) => {
+    const attemptStart = () => {
       if (!isActive) return;
-      const message = error instanceof Error ? error.message : String(error);
-      addStatus(`Test error: ${message}`, 'error');
-      console.error(error);
-    });
+      const canvas = canvasRef.current;
+      if (!canvas) {
+        rafId = requestAnimationFrame(attemptStart);
+        return;
+      }
+
+      runTest(canvas).catch((error: unknown) => {
+        if (!isActive) return;
+        const message = error instanceof Error ? error.message : String(error);
+        addStatus(`Test error: ${message}`, 'error');
+        console.error(error);
+      });
+    };
+
+    attemptStart();
 
     return () => {
       isActive = false;
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
       screenPass?.destroy();
       context?.destroy();
     };

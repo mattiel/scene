@@ -8,6 +8,14 @@
 
 /// <reference types="@webgpu/types" />
 
+import type { SurfaceEffect } from './effects/SurfaceEffect';
+import { SurfaceEffectStack } from './effects/SurfaceEffectStack';
+import { 
+  decomposeTransform, 
+  IDENTITY_TRANSFORM,
+  type DecomposedTransform 
+} from './TransformUtils';
+
 export interface SurfaceRect {
   x: number;
   y: number;
@@ -47,6 +55,7 @@ export class Surface {
   
   private _element: HTMLElement | null;
   private _rect: SurfaceRect;
+  private _transform: DecomposedTransform;
   private _isVisible: boolean = true;
   private _isGhost: boolean = false;
   private _zIndex: number = 0;
@@ -55,10 +64,14 @@ export class Surface {
   // Motion properties (can be bound to motion values or set statically)
   private _motionValues: Map<SurfaceMotionProperty, number> = new Map();
   
+  // Effect stack for per-surface effects
+  private _effectStack: SurfaceEffectStack | null = null;
+  
   // Callbacks (supports multiple subscribers)
   private _onLayoutChangeCallbacks: Set<(rect: SurfaceRect) => void> = new Set();
   private _onVisibilityChangeCallbacks: Set<(visible: boolean) => void> = new Set();
   private _onZIndexChangeCallbacks: Set<(zIndex: number) => void> = new Set();
+  private _onTransformChangeCallbacks: Set<(transform: DecomposedTransform) => void> = new Set();
   
   constructor(
     id: string, 
@@ -69,7 +82,7 @@ export class Surface {
     this._element = element;
     this._isGhost = element === null;
     
-    // Initialize rect
+    // Initialize rect and transform
     if (element) {
       const rect = element.getBoundingClientRect();
       this._rect = {
@@ -78,6 +91,9 @@ export class Surface {
         width: rect.width,
         height: rect.height,
       };
+      
+      // Decompose CSS transform
+      this._transform = decomposeTransform(element);
       
       // Parse z-index from computed style if not provided
       if (options.zIndex === undefined) {
@@ -90,6 +106,7 @@ export class Surface {
     } else {
       // Ghost surface - requires manual rect setting
       this._rect = { x: 0, y: 0, width: 0, height: 0 };
+      this._transform = { ...IDENTITY_TRANSFORM };
       this._zIndex = options.zIndex ?? 0;
     }
     
@@ -132,6 +149,13 @@ export class Surface {
    */
   get isGhost(): boolean {
     return this._isGhost;
+  }
+
+  /**
+   * Get the decomposed CSS transform
+   */
+  get transform(): Readonly<DecomposedTransform> {
+    return this._transform;
   }
 
   /**
@@ -188,6 +212,17 @@ export class Surface {
       for (const callback of this._onVisibilityChangeCallbacks) {
         callback(visible);
       }
+    }
+  }
+
+  /**
+   * Update the transform
+   * @internal Called by LayoutTracker
+   */
+  _updateTransform(transform: DecomposedTransform): void {
+    this._transform = transform;
+    for (const callback of this._onTransformChangeCallbacks) {
+      callback(transform);
     }
   }
 
@@ -260,6 +295,18 @@ export class Surface {
   }
 
   /**
+   * Subscribe to transform changes
+   * Supports multiple subscribers - callbacks are not overwritten
+   * @returns Unsubscribe function
+   */
+  onTransformChange(callback: (transform: DecomposedTransform) => void): () => void {
+    this._onTransformChangeCallbacks.add(callback);
+    return () => {
+      this._onTransformChangeCallbacks.delete(callback);
+    };
+  }
+
+  /**
    * Capture the element's visual appearance to a texture
    * TODO: This will be implemented when renderer integration is added
    */
@@ -274,7 +321,7 @@ export class Surface {
   }
 
   /**
-   * Update the rect from the current DOM element position
+   * Update the rect and transform from the current DOM element
    * Useful for manual updates outside of LayoutTracker
    */
   updateFromDOM(): void {
@@ -289,6 +336,119 @@ export class Surface {
       width: rect.width,
       height: rect.height,
     });
+    
+    // Update transform
+    const transform = decomposeTransform(this._element);
+    this._updateTransform(transform);
+  }
+
+  // ============================================
+  // Effect System
+  // ============================================
+
+  /**
+   * Get the effect stack for this surface
+   * Creates it lazily on first access
+   */
+  get effects(): SurfaceEffectStack {
+    if (!this._effectStack) {
+      this._effectStack = new SurfaceEffectStack(this);
+    }
+    return this._effectStack;
+  }
+
+  /**
+   * Check if this surface has any effects
+   */
+  get hasEffects(): boolean {
+    return this._effectStack !== null && this._effectStack.count > 0;
+  }
+
+  /**
+   * Add an effect to this surface
+   * 
+   * @param effect - The effect to add
+   * @param index - Optional index to insert at
+   * @returns Promise that resolves when effect is ready
+   * 
+   * @example
+   * ```typescript
+   * surface.addEffect(new BlurEffect({ radius: 10 }));
+   * surface.addEffect(new GlowEffect({ intensity: 2 }), 0); // Insert at start
+   * ```
+   */
+  async addEffect(effect: SurfaceEffect, index?: number): Promise<this> {
+    await this.effects.add(effect, index);
+    return this;
+  }
+
+  /**
+   * Remove an effect by ID
+   * 
+   * @param effectId - The ID of the effect to remove
+   * @returns True if effect was removed
+   */
+  removeEffect(effectId: string): boolean {
+    if (!this._effectStack) return false;
+    return this._effectStack.remove(effectId);
+  }
+
+  /**
+   * Get an effect by ID
+   */
+  getEffect(effectId: string): SurfaceEffect | undefined {
+    return this._effectStack?.get(effectId);
+  }
+
+  /**
+   * Check if surface has a specific effect
+   */
+  hasEffect(effectId: string): boolean {
+    return this._effectStack?.has(effectId) ?? false;
+  }
+
+  /**
+   * Enable or disable an effect
+   */
+  setEffectEnabled(effectId: string, enabled: boolean): boolean {
+    return this._effectStack?.setEnabled(effectId, enabled) ?? false;
+  }
+
+  /**
+   * Set effect intensity (0-1)
+   */
+  setEffectIntensity(effectId: string, intensity: number): boolean {
+    return this._effectStack?.setIntensity(effectId, intensity) ?? false;
+  }
+
+  /**
+   * Clear all effects from this surface
+   */
+  clearEffects(): void {
+    this._effectStack?.clear();
+  }
+
+  /**
+   * Initialize the effect stack with a GPU device
+   * Called by renderer when surface is first used
+   */
+  async initEffects(device: GPUDevice): Promise<void> {
+    if (this._effectStack) {
+      await this._effectStack.init(device);
+    }
+  }
+
+  /**
+   * Render effects for this surface
+   * Called by renderer during surface rendering
+   */
+  renderEffects(
+    inputTexture: GPUTexture,
+    outputTexture: GPUTexture
+  ): void {
+    if (this._effectStack && this._effectStack.hasEnabledEffects) {
+      this._effectStack.render(inputTexture, outputTexture, this._rect);
+    }
   }
 
   /**
@@ -299,6 +459,13 @@ export class Surface {
     this._onLayoutChangeCallbacks.clear();
     this._onVisibilityChangeCallbacks.clear();
     this._onZIndexChangeCallbacks.clear();
+    this._onTransformChangeCallbacks.clear();
+    
+    // Clean up effect stack
+    if (this._effectStack) {
+      this._effectStack.destroy();
+      this._effectStack = null;
+    }
     
     // Don't destroy the texture here - that's managed by the renderer
     // Just clear the reference

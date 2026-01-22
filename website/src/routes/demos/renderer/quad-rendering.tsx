@@ -36,15 +36,13 @@ function QuadRenderingDemo() {
   }, []);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
     let isActive = true;
+    let rafId: number | null = null;
     let context: WebGPUContext | null = null;
     let quadRenderer: QuadRenderer | null = null;
     let screenPass: ScreenPass | null = null;
 
-    const runTests = async (): Promise<void> => {
+    const runTests = async (canvas: HTMLCanvasElement): Promise<void> => {
       addStatus('Starting @scene/renderer tests...', 'info');
 
       const isAvailable = await WebGPUContext.checkAvailability();
@@ -68,10 +66,15 @@ function QuadRenderingDemo() {
       addStatus('WebGPU initialized successfully.', 'success');
       addResult('WebGPUContext initialized', true);
       addResult(`Canvas format: ${context.format ?? 'unknown'}`, true);
-      addResult(`Device available: ${context.device !== null}`, context.device !== null);
+      const device = context.device;
+      addResult(`Device available: ${device !== null}`, device !== null);
+      if (!device) {
+        addStatus('WebGPU device unavailable.', 'warning');
+        return;
+      }
 
       const shaderLibrary = new ShaderLibrary();
-      shaderLibrary.setDevice(context.device);
+      shaderLibrary.setDevice(device);
       shaderLibrary.registerDefaults();
       addResult('ShaderLibrary initialized', true);
 
@@ -101,7 +104,7 @@ function QuadRenderingDemo() {
       );
 
       try {
-        const commandEncoder = context.device.createCommandEncoder();
+        const commandEncoder = device.createCommandEncoder();
         const textureView = context.context?.getCurrentTexture().createView();
         if (!textureView) {
           throw new Error('Unable to access current texture');
@@ -118,7 +121,7 @@ function QuadRenderingDemo() {
           ],
         });
         renderPass.end();
-        context.device.queue.submit([commandEncoder.finish()]);
+        device.queue.submit([commandEncoder.finish()]);
         addResult('Rendered test frame with neutral clear color', true);
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
@@ -137,15 +140,29 @@ function QuadRenderingDemo() {
       }, 1000);
     };
 
-    runTests().catch((error: unknown) => {
+    const attemptStart = () => {
       if (!isActive) return;
-      const message = error instanceof Error ? error.message : String(error);
-      addStatus(`Test error: ${message}`, 'error');
-      console.error(error);
-    });
+      const canvas = canvasRef.current;
+      if (!canvas) {
+        rafId = requestAnimationFrame(attemptStart);
+        return;
+      }
+
+      runTests(canvas).catch((error: unknown) => {
+        if (!isActive) return;
+        const message = error instanceof Error ? error.message : String(error);
+        addStatus(`Test error: ${message}`, 'error');
+        console.error(error);
+      });
+    };
+
+    attemptStart();
 
     return () => {
       isActive = false;
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
       quadRenderer?.destroy();
       screenPass?.destroy();
       context?.destroy();

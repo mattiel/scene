@@ -174,6 +174,13 @@ export class Engine {
    * Start the render loop
    */
   start(): void {
+    // Re-register core callback if it was cleared (e.g., after destroy() in StrictMode)
+    if (this._scheduler.callbackCount === 0) {
+      this._scheduler.add(
+        (deltaTime, timestamp) => this.onFrame(deltaTime, timestamp),
+        FramePriority.RENDER
+      );
+    }
     this._scheduler.start();
   }
 

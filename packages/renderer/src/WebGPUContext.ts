@@ -47,10 +47,24 @@ export interface WebGPUCapabilities {
   features: string[];
 }
 
+/**
+ * Progress information during WebGPU initialization
+ */
+export interface WebGPUInitProgress {
+  /** Current step (0-100) */
+  percent: number;
+  /** Human-readable status message */
+  message: string;
+  /** Step identifier for programmatic use */
+  step: 'checking' | 'adapter' | 'device' | 'context' | 'configuring' | 'ready' | 'failed';
+}
+
 export interface WebGPUContextOptions {
   canvas: HTMLCanvasElement;
   powerPreference?: GPUPowerPreference;
   alphaMode?: GPUCanvasAlphaMode;
+  /** Progress callback during initialization */
+  onProgress?: (progress: WebGPUInitProgress) => void;
 }
 
 export interface WebGPUContextState {
@@ -260,6 +274,12 @@ export class WebGPUContext {
    * Initialize WebGPU context with the provided canvas
    */
   async initialize(options: WebGPUContextOptions): Promise<boolean> {
+    const { onProgress } = options;
+    
+    const reportProgress = (percent: number, message: string, step: WebGPUInitProgress['step']) => {
+      onProgress?.({ percent, message, step });
+    };
+
     // If initialize() is called multiple times on the same instance, ensure we
     // tear down any previously-created GPU resources to avoid leaks.
     if (this.state.device || this.state.context) {
@@ -277,6 +297,8 @@ export class WebGPUContext {
     // Check if WebGPU is available
     const browser = this.browserInfo;
     
+    reportProgress(5, 'Checking WebGPU support', 'checking');
+    
     // Enhanced diagnostics for debugging
     console.info(`[WebGPU] Browser: ${browser.isIOSSafari ? 'iOS Safari' : browser.isSafari ? 'Safari' : 'Other'}${browser.iosVersion ? ` (iOS ${browser.iosVersion.major}.${browser.iosVersion.minor})` : ''}`);
     console.info(`[WebGPU] Secure context (HTTPS): ${window.isSecureContext}`);
@@ -285,6 +307,7 @@ export class WebGPUContext {
     if (!navigator.gpu) {
       const support = WebGPUContext.checkExpectedSupport();
       console.warn(`[WebGPU] Not available: ${support.reason}`);
+      reportProgress(100, 'WebGPU not available', 'failed');
       this.state.isAvailable = false;
       this.state.canvas = options.canvas;
       return false;
@@ -296,6 +319,7 @@ export class WebGPUContext {
       const powerPref = options.powerPreference || 
         (browser.isMobile ? 'low-power' : 'high-performance');
       
+      reportProgress(15, 'Requesting adapter', 'adapter');
       console.info(`[WebGPU] Requesting adapter (powerPreference: ${powerPref})...`);
       const adapter: GPUAdapter | null = await navigator.gpu.requestAdapter({
         powerPreference: powerPref
@@ -303,12 +327,15 @@ export class WebGPUContext {
 
       if (!adapter) {
         console.warn('[WebGPU] requestAdapter() returned null - no suitable GPU found');
+        reportProgress(100, 'No suitable GPU found', 'failed');
         this.state.isAvailable = false;
         this.state.canvas = options.canvas;
         return false;
       }
       
       console.info(`[WebGPU] Adapter acquired, features: ${[...adapter.features].join(', ') || 'none'}`);
+      
+      reportProgress(35, 'Requesting device', 'device');
       console.info(`[WebGPU] Requesting device...`);
 
       // Request device
@@ -327,10 +354,12 @@ export class WebGPUContext {
       });
 
       // Get canvas context
+      reportProgress(55, 'Getting canvas context', 'context');
       console.info('[WebGPU] Getting canvas context...');
       const context: GPUCanvasContext | null = options.canvas.getContext('webgpu');
       if (!context) {
         console.warn('[WebGPU] canvas.getContext("webgpu") returned null');
+        reportProgress(100, 'Canvas context unavailable', 'failed');
         device.destroy(); // Clean up device before returning
         this.state.isAvailable = false;
         this.state.canvas = options.canvas;
@@ -341,6 +370,7 @@ export class WebGPUContext {
       const format: GPUTextureFormat = navigator.gpu.getPreferredCanvasFormat();
 
       // Configure context
+      reportProgress(75, 'Configuring context', 'configuring');
       console.info(`[WebGPU] Configuring context (format: ${format})...`);
       try {
         context.configure({
@@ -351,6 +381,7 @@ export class WebGPUContext {
         });
       } catch (configError: unknown) {
         console.error('[WebGPU] context.configure() failed:', configError);
+        reportProgress(100, 'Context configuration failed', 'failed');
         device.destroy(); // Clean up device before returning
         this.state.isAvailable = false;
         this.state.canvas = options.canvas;
@@ -370,11 +401,13 @@ export class WebGPUContext {
       // Populate capabilities for feature detection
       this.populateCapabilities(adapter, device);
 
+      reportProgress(100, 'Ready', 'ready');
       console.info(`[WebGPU] Initialized successfully`);
       return true;
 
     } catch (error: unknown) {
       console.error('[WebGPU] Initialization failed:', error);
+      reportProgress(100, 'Initialization failed', 'failed');
       this.state.isAvailable = false;
       this.state.canvas = options.canvas;
       return false;
@@ -442,6 +475,51 @@ export class WebGPUContext {
     // Update canvas CSS size
     canvas.style.width = `${width}px`;
     canvas.style.height = `${height}px`;
+  }
+
+  /**
+   * Reconfigure the context for a different canvas element.
+   * Reuses the existing adapter and device, avoiding full re-initialization.
+   * Useful when the component remounts but we want to keep the same GPU context.
+   */
+  reconfigure(canvas: HTMLCanvasElement, alphaMode: GPUCanvasAlphaMode = 'premultiplied'): boolean {
+    if (!this.state.device || !this.state.format) {
+      console.warn('[WebGPU] Cannot reconfigure: device not initialized');
+      return false;
+    }
+
+    // Unconfigure old context if it exists
+    try {
+      (this.state.context as unknown as { unconfigure?: () => void } | null)?.unconfigure?.();
+    } catch {
+      // Ignore; unconfigure is not universally implemented
+    }
+
+    // Get new canvas context
+    const context = canvas.getContext('webgpu');
+    if (!context) {
+      console.warn('[WebGPU] canvas.getContext("webgpu") returned null during reconfigure');
+      return false;
+    }
+
+    // Configure new context with existing device
+    try {
+      context.configure({
+        device: this.state.device,
+        format: this.state.format,
+        alphaMode,
+        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC
+      });
+    } catch (error) {
+      console.error('[WebGPU] reconfigure() failed:', error);
+      return false;
+    }
+
+    // Update state
+    this.state.canvas = canvas;
+    this.state.context = context;
+    
+    return true;
   }
 
   /**

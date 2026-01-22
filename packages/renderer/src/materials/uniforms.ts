@@ -175,6 +175,17 @@ export class UniformBuffer {
   }
 
   /**
+   * Set multiple uniform values at once
+   */
+  setMany(values: Record<string, UniformValue>): void {
+    for (const [name, value] of Object.entries(values)) {
+      if (value !== undefined) {
+        this.set(name, value);
+      }
+    }
+  }
+
+  /**
    * Upload dirty uniforms to GPU
    */
   upload(): void {
@@ -230,4 +241,140 @@ export function generateUniformStruct(
     .join('\n');
   
   return `struct ${name} {\n${fields}\n}`;
+}
+
+/**
+ * GlobalUniformManager - Manages shared uniforms across materials
+ * 
+ * Provides a complete bind group (layout + group) for global uniforms
+ * that can be shared across multiple materials. Useful for camera matrices,
+ * time, scene-wide parameters, etc.
+ * 
+ * @example
+ * ```typescript
+ * const globals = new GlobalUniformManager(device, {
+ *   viewProj: { type: 'mat4x4f' },
+ *   time: { type: 'f32', default: 0 },
+ *   globalBend: { type: 'f32', default: 0 },
+ * });
+ * 
+ * // Update uniforms
+ * globals.set('viewProj', camera.getViewProjectionMatrix(aspect));
+ * globals.set('time', performance.now() / 1000);
+ * 
+ * // Upload to GPU
+ * globals.upload();
+ * 
+ * // Use in render pass
+ * passEncoder.setBindGroup(0, globals.getBindGroup());
+ * ```
+ */
+export class GlobalUniformManager {
+  private uniformBuffer: UniformBuffer;
+  private bindGroupLayout: GPUBindGroupLayout;
+  private bindGroup: GPUBindGroup;
+
+  constructor(device: GPUDevice, schema: UniformSchema, label = 'GlobalUniforms') {
+    this.uniformBuffer = new UniformBuffer(schema);
+    this.uniformBuffer.init(device);
+
+    // Create bind group layout with single uniform buffer at binding 0
+    this.bindGroupLayout = device.createBindGroupLayout({
+      label: `${label}_bindGroupLayout`,
+      entries: [{
+        binding: 0,
+        visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+        buffer: { type: 'uniform' },
+      }],
+    });
+
+    // Create bind group
+    const buffer = this.uniformBuffer.getBuffer();
+    if (!buffer) {
+      throw new Error('Failed to create uniform buffer');
+    }
+
+    this.bindGroup = device.createBindGroup({
+      label: `${label}_bindGroup`,
+      layout: this.bindGroupLayout,
+      entries: [{
+        binding: 0,
+        resource: { buffer },
+      }],
+    });
+  }
+
+  /**
+   * Set a uniform value
+   */
+  set(name: string, value: UniformValue): void {
+    this.uniformBuffer.set(name, value);
+  }
+
+  /**
+   * Get a uniform value
+   */
+  get(name: string): number | Float32Array | null {
+    return this.uniformBuffer.get(name);
+  }
+
+  /**
+   * Upload dirty uniforms to GPU
+   * Call this before rendering each frame.
+   */
+  upload(): void {
+    this.uniformBuffer.upload();
+  }
+
+  /**
+   * Force upload regardless of dirty state
+   */
+  forceUpload(): void {
+    this.uniformBuffer.forceUpload();
+  }
+
+  /**
+   * Get the bind group layout for pipeline creation
+   * Use this when creating materials that need to reference the global uniforms.
+   */
+  getBindGroupLayout(): GPUBindGroupLayout {
+    return this.bindGroupLayout;
+  }
+
+  /**
+   * Get the bind group to set in render pass
+   * Typically set at bind group index 0.
+   */
+  getBindGroup(): GPUBindGroup {
+    return this.bindGroup;
+  }
+
+  /**
+   * Get the underlying uniform buffer (for advanced use)
+   */
+  getUniformBuffer(): UniformBuffer {
+    return this.uniformBuffer;
+  }
+
+  /**
+   * Get the buffer layout information
+   */
+  getLayout(): UniformLayout {
+    return this.uniformBuffer.layout;
+  }
+
+  /**
+   * Get the schema
+   */
+  getSchema(): UniformSchema {
+    return this.uniformBuffer.schema;
+  }
+
+  /**
+   * Clean up GPU resources
+   */
+  destroy(): void {
+    this.uniformBuffer.destroy();
+    // Note: bindGroupLayout and bindGroup are destroyed with the device
+  }
 }

@@ -11,9 +11,19 @@ export {
   type ShaderMaterialConfig,
   type Deformation,
   type VertexAttribute,
+  type TextureSlot,
+  type BindGroupEntry,
 } from './ShaderMaterial';
+export {
+  StandardMaterial,
+  createColorMaterial,
+  createTexturedMaterial,
+  createEmissiveMaterial,
+  type StandardMaterialConfig,
+} from './StandardMaterial';
 export { 
-  UniformBuffer, 
+  UniformBuffer,
+  GlobalUniformManager,
   uniformSize, 
   uniformAlignment, 
   calculateLayout,
@@ -24,3 +34,5 @@ export {
   type UniformValues,
   type UniformLayout,
 } from './uniforms';
+// Note: FabricWaveMaterial has been moved to website/src/lib/carousel/
+// It is a user-level implementation, not a library primitive.

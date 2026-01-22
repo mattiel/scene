@@ -17,6 +17,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@scene/core': resolve(__dirname, '../packages/core/src/index.ts'),
+      '@scene/react': resolve(__dirname, '../packages/react/src/index.ts'),
       '@scene/surfaces': resolve(__dirname, '../packages/surfaces/src/index.ts'),
       '@scene/navigation': resolve(__dirname, '../packages/navigation/src/index.ts'),
       '@scene/input': resolve(__dirname, '../packages/input/src/index.ts'),

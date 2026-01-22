@@ -6,6 +6,8 @@
  */
 
 import type { SceneValue2D } from '@scene/motion';
+import type { State2D } from './types';
+import { prefersReducedMotion } from './utils';
 
 /**
  * 2D position
@@ -85,6 +87,12 @@ export interface DraggableConfig {
   reducedMotion?: boolean;
   /** Optional SceneValue2D to bind position to */
   sceneValue?: SceneValue2D;
+  /** Grid size for snapping (e.g., { x: 20, y: 20 }) */
+  grid?: { x?: number; y?: number };
+  /** Snap to grid during drag or only on release (default: 'release') */
+  gridSnapMode?: 'drag' | 'release';
+  /** Scale constraints for pinch-zoom interactions */
+  scaleConstraints?: { min?: number; max?: number };
 }
 
 /**
@@ -102,6 +110,9 @@ interface ResolvedConfig {
   bounce: number;
   reducedMotion: boolean;
   sceneValue: SceneValue2D | undefined;
+  grid: { x?: number; y?: number } | undefined;
+  gridSnapMode: 'drag' | 'release';
+  scaleConstraints: { min?: number; max?: number } | undefined;
 }
 
 const DEFAULT_CONFIG: ResolvedConfig = {
@@ -116,6 +127,9 @@ const DEFAULT_CONFIG: ResolvedConfig = {
   bounce: 0,
   reducedMotion: false,
   sceneValue: undefined,
+  grid: undefined,
+  gridSnapMode: 'release',
+  scaleConstraints: undefined,
 };
 
 /**
@@ -129,6 +143,7 @@ export class Draggable {
   private _position: Position;
   private _velocity: Velocity = { x: 0, y: 0 };
   private _isDragging: boolean = false;
+  private _scale: number = 1;
   
   // Inertia state
   private inertiaActive: boolean = false;
@@ -139,6 +154,11 @@ export class Draggable {
   // Animation
   private animationId: number | null = null;
   private lastFrameTime: number = 0;
+  
+  // Velocity tracking for accurate release velocity
+  private velocityTracker: Array<{ position: Position; time: number }> = [];
+  private static readonly VELOCITY_SAMPLE_COUNT = 5;
+  private static readonly VELOCITY_SAMPLE_WINDOW = 100; // ms
 
   constructor(config: DraggableConfig = {}) {
     this.config = {
@@ -149,6 +169,11 @@ export class Draggable {
     };
     
     this._position = { ...this.config.initialPosition };
+    
+    // Auto-detect reduced motion if not explicitly set
+    if (config.reducedMotion === undefined) {
+      this.config.reducedMotion = prefersReducedMotion();
+    }
     
     // Apply reduced motion adjustments
     if (this.config.reducedMotion) {
@@ -192,6 +217,30 @@ export class Draggable {
     return this.inertiaActive;
   }
 
+  /**
+   * Get a snapshot of the current state
+   */
+  getState(): State2D {
+    return {
+      position: { ...this._position },
+      velocity: { ...this._velocity },
+      isDragging: this._isDragging,
+      isAnimating: this.inertiaActive,
+    };
+  }
+
+  /** Current scale (for pinch-zoom interactions) */
+  get scale(): number {
+    return this._scale;
+  }
+
+  /**
+   * Set scale directly (clamped to constraints if configured)
+   */
+  setScale(scale: number): void {
+    this._scale = this.clampScale(scale);
+  }
+
   // ============================================
   // Configuration
   // ============================================
@@ -200,15 +249,31 @@ export class Draggable {
    * Update configuration
    */
   setConfig(config: Partial<DraggableConfig>): void {
+    // Handle nested objects with merge
     if (config.bounds) {
       this.config.bounds = { ...this.config.bounds, ...config.bounds };
     }
     if (config.initialPosition) {
       this.config.initialPosition = { ...config.initialPosition };
     }
+    if (config.grid !== undefined) {
+      this.config.grid = config.grid;
+    }
+    if (config.scaleConstraints !== undefined) {
+      this.config.scaleConstraints = config.scaleConstraints;
+    }
     
-    const { bounds, initialPosition, ...rest } = config;
-    Object.assign(this.config, rest);
+    // Apply scalar config options
+    if (config.axis !== undefined) this.config.axis = config.axis;
+    if (config.sensitivity !== undefined) this.config.sensitivity = config.sensitivity;
+    if (config.enableInertia !== undefined) this.config.enableInertia = config.enableInertia;
+    if (config.friction !== undefined) this.config.friction = config.friction;
+    if (config.minVelocity !== undefined) this.config.minVelocity = config.minVelocity;
+    if (config.decayDuration !== undefined) this.config.decayDuration = config.decayDuration;
+    if (config.bounce !== undefined) this.config.bounce = config.bounce;
+    if (config.reducedMotion !== undefined) this.config.reducedMotion = config.reducedMotion;
+    if (config.sceneValue !== undefined) this.config.sceneValue = config.sceneValue;
+    if (config.gridSnapMode !== undefined) this.config.gridSnapMode = config.gridSnapMode;
     
     // Re-clamp position if bounds changed
     const clamped = this.clampPosition(this._position);
@@ -277,6 +342,7 @@ export class Draggable {
     this.stopAnimations();
     this._isDragging = true;
     this._velocity = { x: 0, y: 0 };
+    this.clearVelocitySamples();
     
     this.emit('dragStart', { position: this.position });
   }
@@ -297,17 +363,24 @@ export class Draggable {
       dx = 0;
     }
     
-    const newPosition = {
+    let newPosition = {
       x: this._position.x + dx,
       y: this._position.y + dy,
     };
     
+    // Apply grid snapping during drag if configured
+    if (this.config.grid && this.config.gridSnapMode === 'drag') {
+      newPosition = this.snapToGrid(newPosition);
+    }
+    
     const clamped = this.clampPosition(newPosition);
     
-    // Track velocity
-    this._velocity = { x: dx, y: dy };
-    
     this._position = clamped;
+    
+    // Track position for accurate velocity calculation
+    this.trackVelocitySample(clamped);
+    this._velocity = this.calculateTrackedVelocity();
+    
     this.syncToSceneValue();
     
     this.emit('change', { position: this.position, velocity: this.velocity });
@@ -319,16 +392,29 @@ export class Draggable {
   handleDragEnd(velocityX?: number, velocityY?: number): void {
     this._isDragging = false;
     
+    // Use provided velocity, or calculated from tracking, or fallback to current
+    const trackedVelocity = this.calculateTrackedVelocity();
     const velocity: Velocity = {
-      x: velocityX ?? this._velocity.x,
-      y: velocityY ?? this._velocity.y,
+      x: velocityX ?? (trackedVelocity.x || this._velocity.x),
+      y: velocityY ?? (trackedVelocity.y || this._velocity.y),
     };
+    this.clearVelocitySamples();
     
     // Apply axis constraint to velocity
     if (this.config.axis === 'x') {
       velocity.y = 0;
     } else if (this.config.axis === 'y') {
       velocity.x = 0;
+    }
+    
+    // Snap to grid on release if configured
+    if (this.config.grid && this.config.gridSnapMode === 'release') {
+      const snapped = this.snapToGrid(this._position);
+      if (snapped.x !== this._position.x || snapped.y !== this._position.y) {
+        this._position = snapped;
+        this.syncToSceneValue();
+        this.emit('change', { position: this.position, velocity: { x: 0, y: 0 } });
+      }
     }
     
     this.emit('dragEnd', { position: this.position, velocity });
@@ -453,6 +539,22 @@ export class Draggable {
   // ============================================
 
   /**
+   * Subscribe to the 'change' event
+   */
+  on(event: 'change', callback: (payload: { position: Position; velocity: Velocity }) => void): () => void;
+  /**
+   * Subscribe to the 'dragStart' event
+   */
+  on(event: 'dragStart', callback: (payload: { position: Position }) => void): () => void;
+  /**
+   * Subscribe to the 'dragEnd' event
+   */
+  on(event: 'dragEnd', callback: (payload: { position: Position; velocity: Velocity }) => void): () => void;
+  /**
+   * Subscribe to the 'boundReached' event
+   */
+  on(event: 'boundReached', callback: (payload: { bounds: ('minX' | 'maxX' | 'minY' | 'maxY')[]; position: Position }) => void): () => void;
+  /**
    * Subscribe to an event
    */
   on<K extends keyof DraggableEvents>(
@@ -510,6 +612,17 @@ export class Draggable {
     return { x, y };
   }
 
+  private clampScale(scale: number): number {
+    const { scaleConstraints } = this.config;
+    if (!scaleConstraints) return scale;
+    
+    let result = scale;
+    if (scaleConstraints.min !== undefined) result = Math.max(scaleConstraints.min, result);
+    if (scaleConstraints.max !== undefined) result = Math.min(scaleConstraints.max, result);
+    
+    return result;
+  }
+
   private checkBoundReached(original: Position, clamped: Position): void {
     const { bounds } = this.config;
     const hitBounds: ('minX' | 'maxX' | 'minY' | 'maxY')[] = [];
@@ -528,10 +641,64 @@ export class Draggable {
     return t >= 1 ? 1 : 1 - Math.pow(2, -10 * t);
   }
 
+  /**
+   * Snap position to grid
+   */
+  private snapToGrid(position: Position): Position {
+    const { grid } = this.config;
+    if (!grid) return position;
+    
+    return {
+      x: grid.x ? Math.round(position.x / grid.x) * grid.x : position.x,
+      y: grid.y ? Math.round(position.y / grid.y) * grid.y : position.y,
+    };
+  }
+
   private syncToSceneValue(): void {
     if (this.config.sceneValue) {
       this.config.sceneValue.set(this._position.x, this._position.y);
     }
+  }
+
+  /**
+   * Track position sample for velocity calculation
+   */
+  private trackVelocitySample(position: Position): void {
+    const now = performance.now();
+    this.velocityTracker.push({ position: { ...position }, time: now });
+    
+    // Keep samples within window and count limit
+    while (
+      this.velocityTracker.length > Draggable.VELOCITY_SAMPLE_COUNT ||
+      (this.velocityTracker.length > 0 && now - this.velocityTracker[0].time > Draggable.VELOCITY_SAMPLE_WINDOW)
+    ) {
+      this.velocityTracker.shift();
+    }
+  }
+
+  /**
+   * Calculate velocity from tracked samples
+   */
+  private calculateTrackedVelocity(): Velocity {
+    if (this.velocityTracker.length < 2) return { x: 0, y: 0 };
+    
+    const first = this.velocityTracker[0];
+    const last = this.velocityTracker[this.velocityTracker.length - 1];
+    const dt = last.time - first.time;
+    
+    if (dt <= 0) return { x: 0, y: 0 };
+    
+    return {
+      x: (last.position.x - first.position.x) / dt,
+      y: (last.position.y - first.position.y) / dt,
+    };
+  }
+
+  /**
+   * Clear velocity samples
+   */
+  private clearVelocitySamples(): void {
+    this.velocityTracker = [];
   }
 
   // ============================================

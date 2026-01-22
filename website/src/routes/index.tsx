@@ -2,6 +2,26 @@ import { createFileRoute, Link } from '@tanstack/react-router';
 
 const demoGroups = [
   {
+    title: 'Primitives',
+    items: [
+      {
+        title: 'Motion',
+        to: '/demos/motion-basic',
+        description: 'Spring animations, derived values, velocity tracking, and 2D motion.',
+      },
+      {
+        title: 'Scrollable',
+        to: '/demos/scrollable-basic',
+        description: '1D scroll/drag with bounds, snap points, inertia, and wheel support.',
+      },
+      {
+        title: 'Draggable',
+        to: '/demos/draggable-basic',
+        description: '2D drag with bounds, axis locking, grid snapping, and inertia.',
+      },
+    ],
+  },
+  {
     title: 'Core Demo',
     items: [
       {

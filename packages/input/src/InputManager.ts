@@ -3,6 +3,7 @@
  *
  * High-level input coordinator that ties together PointerManager, Inertia, and Picking.
  * Integrates with the Engine's mode system to automatically enable/disable picking.
+ * Optionally supports multi-touch gestures, gesture recognition, and debugging tools.
  */
 
 import type { Engine, EventBus } from '@scene/core';
@@ -12,6 +13,14 @@ import { Inertia } from './Inertia';
 import type { InertiaState, InertiaOptions } from './Inertia';
 import { Picking } from './Picking';
 import type { PickableRegistry, PickEvent } from './Picking';
+import { MultiTouch } from './MultiTouch';
+import type { MultiTouchState, MultiTouchOptions } from './MultiTouch';
+import { GestureRecognizer } from './GestureRecognizer';
+import type { GestureEvent, GestureRecognizerOptions, CustomGestureDefinition } from './GestureRecognizer';
+import { InputRecorder } from './InputRecorder';
+import type { InputRecording, PlaybackCallbacks, PlaybackOptions } from './InputRecorder';
+import { InputVisualizer } from './InputVisualizer';
+import type { InputVisualizerOptions } from './InputVisualizer';
 
 /**
  * Intent events emitted by InputManager
@@ -31,6 +40,18 @@ export interface InputIntents {
   hoverLeave: { surfaceId: string };
   /** Inertia update */
   inertia: InertiaState;
+  /** Multi-touch gesture start */
+  multiTouchStart: MultiTouchState;
+  /** Multi-touch gesture move */
+  multiTouchMove: MultiTouchState;
+  /** Multi-touch gesture end */
+  multiTouchEnd: MultiTouchState;
+  /** Pinch gesture */
+  pinch: MultiTouchState;
+  /** Rotate gesture */
+  rotate: MultiTouchState;
+  /** Recognized gesture (tap, doubleTap, longPress, swipe) */
+  gesture: GestureEvent;
 }
 
 /**
@@ -52,6 +73,14 @@ export interface InputManagerConfig {
   inertiaOptions?: InertiaOptions;
   /** Surface registry for picking */
   registry?: PickableRegistry;
+  /** Enable multi-touch gesture tracking (default: true) */
+  enableMultiTouch?: boolean;
+  /** Multi-touch options */
+  multiTouchOptions?: MultiTouchOptions;
+  /** Enable gesture recognition (default: true) */
+  enableGestures?: boolean;
+  /** Gesture recognizer options */
+  gestureOptions?: GestureRecognizerOptions;
 }
 
 /**
@@ -64,6 +93,10 @@ interface ResolvedConfig {
   enableInertia: boolean;
   inertiaOptions: InertiaOptions;
   registry: PickableRegistry | undefined;
+  enableMultiTouch: boolean;
+  multiTouchOptions: MultiTouchOptions;
+  enableGestures: boolean;
+  gestureOptions: GestureRecognizerOptions;
 }
 
 /**
@@ -77,6 +110,10 @@ export class InputManager {
   private pointerManager: PointerManager | null = null;
   private inertia: Inertia;
   private picking: Picking;
+  private multiTouch: MultiTouch;
+  private gestureRecognizer: GestureRecognizer;
+  private recorder: InputRecorder;
+  private visualizer: InputVisualizer | null = null;
   
   // Intent listeners
   private intentListeners: Map<keyof InputIntents, Set<IntentCallback<keyof InputIntents>>> = new Map();
@@ -97,6 +134,10 @@ export class InputManager {
       enableInertia: config.enableInertia ?? true,
       inertiaOptions: config.inertiaOptions ?? {},
       registry: config.registry,
+      enableMultiTouch: config.enableMultiTouch ?? true,
+      multiTouchOptions: config.multiTouchOptions ?? {},
+      enableGestures: config.enableGestures ?? true,
+      gestureOptions: config.gestureOptions ?? {},
     };
     
     // Initialize subsystems
@@ -107,6 +148,23 @@ export class InputManager {
       onEnter: this.onSurfaceEnter.bind(this),
       onLeave: this.onSurfaceLeave.bind(this),
     });
+    
+    // Initialize multi-touch tracking
+    this.multiTouch = new MultiTouch({
+      onMultiTouchStart: (state) => this.emitIntent('multiTouchStart', state),
+      onMultiTouchMove: (state) => this.emitIntent('multiTouchMove', state),
+      onMultiTouchEnd: (state) => this.emitIntent('multiTouchEnd', state),
+      onPinch: (state) => this.emitIntent('pinch', state),
+      onRotate: (state) => this.emitIntent('rotate', state),
+    }, this.config.multiTouchOptions);
+    
+    // Initialize gesture recognizer
+    this.gestureRecognizer = new GestureRecognizer({
+      onGesture: (event) => this.emitIntent('gesture', event),
+    }, this.config.gestureOptions);
+    
+    // Initialize input recorder
+    this.recorder = new InputRecorder();
     
     if (this.config.registry) {
       this.picking.setRegistry(this.config.registry);
@@ -240,6 +298,22 @@ export class InputManager {
     // Stop any inertia animation
     this.inertia.stop();
     
+    // Record event if recording
+    this.recorder.recordPointerDown(pointer);
+    
+    // Update visualizer if attached
+    this.visualizer?.handlePointerDown(pointer);
+    
+    // Update multi-touch tracking
+    if (this.config.enableMultiTouch) {
+      this.multiTouch.handlePointerDown(pointer);
+    }
+    
+    // Update gesture recognizer
+    if (this.config.enableGestures) {
+      this.gestureRecognizer.handlePointerDown(pointer);
+    }
+    
     // Determine surface once to avoid duplicate events
     let surfaceId: string | undefined;
 
@@ -264,6 +338,24 @@ export class InputManager {
    * Handle pointer move
    */
   private onPointerMove(pointer: NormalizedPointer): void {
+    // Record event if recording
+    this.recorder.recordPointerMove(pointer);
+    
+    // Update visualizer if attached
+    this.visualizer?.handlePointerMove(pointer);
+    
+    // Update multi-touch tracking
+    if (this.config.enableMultiTouch) {
+      this.multiTouch.handlePointerMove(pointer);
+      // Update visualizer with multi-touch state
+      this.visualizer?.updateMultiTouch(this.multiTouch.getState());
+    }
+    
+    // Update gesture recognizer
+    if (this.config.enableGestures) {
+      this.gestureRecognizer.handlePointerMove(pointer);
+    }
+    
     // Emit core event
     this.eventBus.emit('pointer:move', {
       x: pointer.x,
@@ -284,6 +376,25 @@ export class InputManager {
    * Handle pointer up
    */
   private onPointerUp(pointer: NormalizedPointer): void {
+    // Record event if recording
+    this.recorder.recordPointerUp(pointer);
+    
+    // Update visualizer if attached
+    this.visualizer?.handlePointerUp(pointer);
+    
+    // Update multi-touch tracking
+    if (this.config.enableMultiTouch) {
+      this.multiTouch.handlePointerUp(pointer);
+      this.visualizer?.updateMultiTouch(
+        this.multiTouch.isActive ? this.multiTouch.getState() : null
+      );
+    }
+    
+    // Update gesture recognizer
+    if (this.config.enableGestures) {
+      this.gestureRecognizer.handlePointerUp(pointer);
+    }
+    
     // Emit core event
     this.eventBus.emit('pointer:up', {
       x: pointer.x,
@@ -318,6 +429,25 @@ export class InputManager {
    * Resets drag state without emitting tap intent.
    */
   private onPointerCancel(pointer: NormalizedPointer): void {
+    // Record event if recording
+    this.recorder.recordPointerCancel(pointer);
+    
+    // Update visualizer if attached
+    this.visualizer?.handlePointerCancel(pointer);
+    
+    // Update multi-touch tracking
+    if (this.config.enableMultiTouch) {
+      this.multiTouch.handlePointerCancel(pointer);
+      this.visualizer?.updateMultiTouch(
+        this.multiTouch.isActive ? this.multiTouch.getState() : null
+      );
+    }
+    
+    // Update gesture recognizer
+    if (this.config.enableGestures) {
+      this.gestureRecognizer.handlePointerCancel(pointer);
+    }
+    
     // Emit core event
     this.eventBus.emit('pointer:cancel', {
       x: pointer.x,
@@ -475,6 +605,137 @@ export class InputManager {
   }
 
   /**
+   * Get the MultiTouch instance
+   */
+  get multiTouchSystem(): MultiTouch {
+    return this.multiTouch;
+  }
+
+  /**
+   * Get the GestureRecognizer instance
+   */
+  get gestureSystem(): GestureRecognizer {
+    return this.gestureRecognizer;
+  }
+
+  /**
+   * Get the InputRecorder instance
+   */
+  get recorderSystem(): InputRecorder {
+    return this.recorder;
+  }
+
+  // --- Recording Methods ---
+
+  /**
+   * Start recording input events
+   */
+  startRecording(): void {
+    this.recorder.startRecording();
+  }
+
+  /**
+   * Stop recording and return the recording
+   */
+  stopRecording(customMetadata?: Record<string, unknown>): InputRecording {
+    return this.recorder.stopRecording(customMetadata);
+  }
+
+  /**
+   * Check if currently recording
+   */
+  get isRecording(): boolean {
+    return this.recorder.recording;
+  }
+
+  /**
+   * Start playback of a recording
+   */
+  startPlayback(
+    recording: InputRecording,
+    options: PlaybackOptions = {}
+  ): void {
+    const callbacks: PlaybackCallbacks = {
+      onPointerDown: (pointer) => this.onPointerDown(pointer),
+      onPointerMove: (pointer) => this.onPointerMove(pointer),
+      onPointerUp: (pointer) => this.onPointerUp(pointer),
+      onPointerCancel: (pointer) => this.onPointerCancel(pointer),
+    };
+    this.recorder.startPlayback(recording, callbacks, options);
+  }
+
+  /**
+   * Stop playback
+   */
+  stopPlayback(): void {
+    this.recorder.stopPlayback();
+  }
+
+  /**
+   * Check if currently playing back
+   */
+  get isPlaying(): boolean {
+    return this.recorder.playing;
+  }
+
+  // --- Visualizer Methods ---
+
+  /**
+   * Enable the debug visualizer overlay
+   */
+  enableVisualizer(options: InputVisualizerOptions = {}): void {
+    if (this.visualizer) {
+      this.visualizer.setOptions(options);
+      if (!this.visualizer.attached) {
+        this.visualizer.attach();
+      }
+      return;
+    }
+    
+    this.visualizer = new InputVisualizer(options);
+    this.visualizer.attach();
+    
+    // Connect gesture recognizer to visualizer
+    const originalOnGesture = this.gestureRecognizer['callbacks'].onGesture;
+    this.gestureRecognizer.setCallbacks({
+      onGesture: (event) => {
+        originalOnGesture?.(event);
+        this.visualizer?.showGesture(event);
+      },
+    });
+  }
+
+  /**
+   * Disable the debug visualizer overlay
+   */
+  disableVisualizer(): void {
+    this.visualizer?.detach();
+  }
+
+  /**
+   * Check if visualizer is enabled
+   */
+  get isVisualizerEnabled(): boolean {
+    return this.visualizer?.attached ?? false;
+  }
+
+  // --- Custom Gesture Registration ---
+
+  /**
+   * Register a custom gesture
+   */
+  registerGesture(definition: CustomGestureDefinition): () => void {
+    return this.gestureRecognizer.registerGesture(definition);
+  }
+
+  /**
+   * Unregister a custom gesture
+   */
+  unregisterGesture(name: string): boolean {
+    return this.gestureRecognizer.unregisterGesture(name);
+  }
+
+  /**
    * Destroy the InputManager
    */
   destroy(): void {
@@ -490,6 +751,11 @@ export class InputManager {
     
     this.inertia.destroy();
     this.picking.destroy();
+    this.multiTouch.destroy();
+    this.gestureRecognizer.destroy();
+    this.recorder.destroy();
+    this.visualizer?.destroy();
+    this.visualizer = null;
     
     // Clear listeners
     this.intentListeners.clear();
