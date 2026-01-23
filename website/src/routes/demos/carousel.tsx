@@ -409,50 +409,59 @@ function CarouselDemo() {
 
       // Find clicked card
       let closestIndex = -1;
-      let closestDist = Infinity;
       const currentExpandProgress = expandMotion.value;
       
       // Check which card is visually expanded (could be collapsing)
       const isCollapsing = expandedIndex === -1 && anim.lastExpandedIndex >= 0 && currentExpandProgress > 0.01;
       const visuallyExpandedIndex = isCollapsing ? anim.lastExpandedIndex : expandedIndex;
 
-      for (let i = 0; i < CARD_DATA.length; i++) {
+      // PRIORITY: Check expanded card FIRST - it's visually in front
+      // If click is within its bounds, it wins regardless of other cards
+      if (visuallyExpandedIndex >= 0 && currentExpandProgress > 0.01) {
+        const i = visuallyExpandedIndex;
         const baseX = (i - midIndex) * config.cardSpacing + offset;
         
-        // Account for expanded/collapsing card position and size
-        const isVisuallyExpanded = i === visuallyExpandedIndex && currentExpandProgress > 0.01;
-        let itemX: number;
-        let hitWidth: number;
-        let hitHeight: number;
+        // Expanded card calculation with perspective
+        const finalZ = currentExpandProgress * 300;
+        const perspective = config.cameraZ / (config.cameraZ - finalZ);
+        const baseScale = 1 + currentExpandProgress * config.expandScale;
+        const totalScale = perspective * baseScale;
         
-        if (isVisuallyExpanded) {
-          // Expanded card moves toward center, is scaled up, AND has perspective applied
-          // Match the render loop: finalZ = expandProgress * 300, perspective = cameraZ / (cameraZ - z)
-          const finalZ = currentExpandProgress * 300;
-          const perspective = config.cameraZ / (config.cameraZ - finalZ);
-          const baseScale = 1 + currentExpandProgress * config.expandScale;
-          const totalScale = perspective * baseScale;
-          
-          // Position also affected by perspective: projectedX = finalX * perspective
-          const finalX = baseX * (1 - currentExpandProgress); // lerp toward 0
-          itemX = centerX + finalX * perspective;
-          hitWidth = config.cardWidth * totalScale;
-          hitHeight = config.cardHeight * totalScale;
-        } else {
-          itemX = centerX + baseX;
-          hitWidth = config.cardWidth;
-          hitHeight = config.cardHeight;
-        }
+        const finalX = baseX * (1 - currentExpandProgress);
+        const itemX = centerX + finalX * perspective;
+        const hitWidth = config.cardWidth * totalScale;
+        const hitHeight = config.cardHeight * totalScale;
         
-        const itemY = centerY;
         const dx = Math.abs(clickX - itemX);
-        const dy = Math.abs(clickY - itemY);
+        const dy = Math.abs(clickY - centerY);
 
+        // If click is within expanded card, it takes priority
         if (dx < hitWidth / 2 + 30 && dy < hitHeight / 2 + 30) {
-          const dist = dx + dy;
-          if (dist < closestDist) {
-            closestDist = dist;
-            closestIndex = i;
+          closestIndex = i;
+        }
+      }
+
+      // Only check other cards if expanded card wasn't hit
+      if (closestIndex < 0) {
+        let closestDist = Infinity;
+        for (let i = 0; i < CARD_DATA.length; i++) {
+          // Skip the expanded card (already checked above)
+          if (i === visuallyExpandedIndex && currentExpandProgress > 0.01) continue;
+          
+          const baseX = (i - midIndex) * config.cardSpacing + offset;
+          const itemX = centerX + baseX;
+          const hitWidth = config.cardWidth;
+          const hitHeight = config.cardHeight;
+          
+          const dx = Math.abs(clickX - itemX);
+          const dy = Math.abs(clickY - centerY);
+
+          if (dx < hitWidth / 2 + 30 && dy < hitHeight / 2 + 30) {
+            const dist = dx + dy;
+            if (dist < closestDist) {
+              closestDist = dist;
+              closestIndex = i;
+            }
           }
         }
       }
