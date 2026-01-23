@@ -435,6 +435,18 @@ function CarouselDemo() {
         const dx = Math.abs(clickX - itemX);
         const dy = Math.abs(clickY - centerY);
 
+        // DEBUG: Log hit detection values
+        console.log('[HIT DEBUG] Expanded card check:', {
+          visuallyExpandedIndex,
+          expandProgress: currentExpandProgress,
+          click: { x: clickX, y: clickY },
+          cardCenter: { x: itemX, y: centerY },
+          hitSize: { w: hitWidth, h: hitHeight },
+          distance: { dx, dy },
+          maxDist: { x: hitWidth / 2 + 30, y: hitHeight / 2 + 30 },
+          isHit: dx < hitWidth / 2 + 30 && dy < hitHeight / 2 + 30,
+        });
+
         // If click is within expanded card, it takes priority
         if (dx < hitWidth / 2 + 30 && dy < hitHeight / 2 + 30) {
           closestIndex = i;
