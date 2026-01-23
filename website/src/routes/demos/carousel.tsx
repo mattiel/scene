@@ -415,6 +415,17 @@ function CarouselDemo() {
       const isCollapsing = expandedIndex === -1 && anim.lastExpandedIndex >= 0 && currentExpandProgress > 0.01;
       const visuallyExpandedIndex = isCollapsing ? anim.lastExpandedIndex : expandedIndex;
 
+      // DEBUG: Log state before hit detection
+      console.log('[TAP DEBUG] State:', {
+        expandedIndex,
+        lastExpandedIndex: anim.lastExpandedIndex,
+        currentExpandProgress,
+        isCollapsing,
+        visuallyExpandedIndex,
+        willCheckExpanded: visuallyExpandedIndex >= 0 && currentExpandProgress > 0.01,
+        click: { x: clickX, y: clickY },
+      });
+
       // PRIORITY: Check expanded card FIRST - it's visually in front
       // If click is within its bounds, it wins regardless of other cards
       if (visuallyExpandedIndex >= 0 && currentExpandProgress > 0.01) {
