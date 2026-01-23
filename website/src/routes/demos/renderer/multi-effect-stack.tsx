@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
-import { WebGPUContext, ShaderLibrary, ScreenPass } from '@scene/renderer';
+import { ShaderLibrary, ScreenPass, type WebGPUContext } from '@scene/renderer';
+import { acquireSharedWebGPUContext } from '../../../lib/webgpu';
 import { DemoLayout } from '../../../components/DemoLayout';
 import type { StatusItem } from '../../../components/StatusPanel';
 import { StatusPanel } from '../../../components/StatusPanel';
@@ -39,23 +40,28 @@ function MultiEffectStackDemo() {
     let isActive = true;
     let rafId: number | null = null;
     let context: WebGPUContext | null = null;
+    let releaseContext: (() => void) | null = null;
     let screenPass: ScreenPass | null = null;
 
     const runTest = async (canvas: HTMLCanvasElement): Promise<void> => {
       addStatus('Starting multi-effect stack test...', 'info');
 
-      context = new WebGPUContext();
-      const initialized = await context.initialize({
-        canvas,
+      const { context: sharedContext, initialized, reused, release } = await acquireSharedWebGPUContext(canvas, {
         powerPreference: 'high-performance',
       });
+      if (!isActive) {
+        release();
+        return;
+      }
+      releaseContext = release;
+      context = sharedContext;
 
-      if (!initialized) {
+      if (!initialized || !context) {
         addStatus('WebGPU not available - test cannot run.', 'warning');
         return;
       }
 
-      addStatus('WebGPU initialized.', 'success');
+      addStatus(reused ? 'Reusing WebGPU context.' : 'WebGPU initialized.', reused ? 'info' : 'success');
 
       const device = context.device;
       if (!device) {
@@ -199,7 +205,8 @@ function MultiEffectStackDemo() {
         cancelAnimationFrame(rafId);
       }
       screenPass?.destroy();
-      context?.destroy();
+      releaseContext?.();
+      releaseContext = null;
     };
   }, [addResult, addStatus]);
 

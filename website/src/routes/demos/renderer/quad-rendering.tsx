@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
 import { WebGPUContext, ShaderLibrary, QuadRenderer, ScreenPass } from '@scene/renderer';
+import { acquireSharedWebGPUContext } from '../../../lib/webgpu';
 import { DemoLayout } from '../../../components/DemoLayout';
 import type { StatusItem } from '../../../components/StatusPanel';
 import { StatusPanel } from '../../../components/StatusPanel';
@@ -39,6 +40,7 @@ function QuadRenderingDemo() {
     let isActive = true;
     let rafId: number | null = null;
     let context: WebGPUContext | null = null;
+    let releaseContext: (() => void) | null = null;
     let quadRenderer: QuadRenderer | null = null;
     let screenPass: ScreenPass | null = null;
 
@@ -51,19 +53,23 @@ function QuadRenderingDemo() {
         true
       );
 
-      context = new WebGPUContext();
-      const initialized = await context.initialize({
-        canvas,
+      const { context: sharedContext, initialized, reused, release } = await acquireSharedWebGPUContext(canvas, {
         powerPreference: 'high-performance',
       });
+      if (!isActive) {
+        release();
+        return;
+      }
+      releaseContext = release;
+      context = sharedContext;
 
-      if (!initialized) {
+      if (!initialized || !context) {
         addStatus('WebGPU unavailable - running in DOM-only mode.', 'warning');
         addResult('WebGPUContext gracefully degraded', true);
         return;
       }
 
-      addStatus('WebGPU initialized successfully.', 'success');
+      addStatus(reused ? 'Reusing WebGPU context.' : 'WebGPU initialized successfully.', reused ? 'info' : 'success');
       addResult('WebGPUContext initialized', true);
       addResult(`Canvas format: ${context.format ?? 'unknown'}`, true);
       const device = context.device;
@@ -135,7 +141,8 @@ function QuadRenderingDemo() {
         addStatus('Cleaning up resources...', 'info');
         quadRenderer?.destroy();
         screenPass?.destroy();
-        context?.destroy();
+        releaseContext?.();
+        releaseContext = null;
         addResult('Resources cleaned up', true);
       }, 1000);
     };
@@ -165,7 +172,8 @@ function QuadRenderingDemo() {
       }
       quadRenderer?.destroy();
       screenPass?.destroy();
-      context?.destroy();
+      releaseContext?.();
+      releaseContext = null;
     };
   }, [addResult, addStatus]);
 

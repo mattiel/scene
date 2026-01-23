@@ -10,13 +10,27 @@ import { WebGPUContext, ShaderLibrary } from '@scene/renderer';
 import { useSceneContext } from './SceneProvider';
 import { InteractionMode } from '@scene/core';
 
-// Module-level singleton to prevent multiple concurrent GPU initializations
-// across component instances (e.g., during route transitions)
-let globalInitPromise: Promise<{ context: WebGPUContext; shaderLibrary: ShaderLibrary } | null> | null = null;
-let globalContext: WebGPUContext | null = null;
-let globalShaderLibrary: ShaderLibrary | null = null;
-let globalRefCount = 0;
-let globalInitLock = false; // Synchronous lock to prevent race conditions
+type GlobalGPUState = {
+  initPromise: Promise<{ context: WebGPUContext; shaderLibrary: ShaderLibrary } | null> | null;
+  context: WebGPUContext | null;
+  shaderLibrary: ShaderLibrary | null;
+  refCount: number;
+  destroyTimeout: ReturnType<typeof setTimeout> | null;
+};
+
+const getGlobalGPUState = (): GlobalGPUState => {
+  const root = globalThis as typeof globalThis & { __sceneGPUState?: GlobalGPUState };
+  if (!root.__sceneGPUState) {
+    root.__sceneGPUState = {
+      initPromise: null,
+      context: null,
+      shaderLibrary: null,
+      refCount: 0,
+      destroyTimeout: null,
+    };
+  }
+  return root.__sceneGPUState;
+};
 
 /**
  * GPU initialization options
@@ -125,6 +139,8 @@ export function useGPU(
     forceFallback = false,
   } = options;
 
+  const globalState = getGlobalGPUState();
+
   // Get scene context for mode management
   const { engine } = useSceneContext();
 
@@ -174,201 +190,170 @@ export function useGPU(
     // Reset progress at start
     setProgress({ percent: 0, message: 'Initializing', isLoading: true });
 
-    // Force fallback mode for testing
-    if (forceFallback) {
-      const reason = 'Forced fallback mode (testing)';
-      setGpuContext(null);
-      setShaderLib(null);
-      setFallbackReason(reason);
-      setIsFallback(true);
-      setIsReady(false);
-      setProgress({ percent: 100, message: 'Fallback mode', isLoading: false });
-      engine.mode = InteractionMode.DOM_INTERACTIVE;
-      onFallbackRef.current?.(reason);
-      initializingRef.current = false;
-      return false;
-    }
+    const isCurrent = (): boolean => initId === initIdRef.current;
 
-    try {
-      // Check if we already have a global context we can reuse
-      if (globalContext?.isAvailable && globalContext.device && globalShaderLibrary) {
-        // Reuse existing context - just reconfigure for this canvas
-        globalRefCount++;
-        contextRef.current = globalContext;
-        shaderLibraryRef.current = globalShaderLibrary;
-        
-        // Reconfigure context for this canvas
-        globalContext.reconfigure(canvas);
-        
-        // Set initial viewport size
-        const rect = canvas.getBoundingClientRect();
-        const dpr = window.devicePixelRatio || 1;
-        canvas.width = Math.floor(rect.width * dpr);
-        canvas.height = Math.floor(rect.height * dpr);
+    const scheduleGlobalDestroy = (): void => {
+      if (globalState.destroyTimeout) {
+        clearTimeout(globalState.destroyTimeout);
+      }
+      globalState.destroyTimeout = setTimeout(() => {
+        if (globalState.refCount > 0) return;
+        globalState.context?.destroy();
+        globalState.context = null;
+        globalState.shaderLibrary = null;
+        globalState.initPromise = null;
+        globalState.refCount = 0;
+        globalState.destroyTimeout = null;
+      }, 250);
+    };
 
-        setBrowserInfo({
-          isIOSSafari: globalContext.browserInfo.isIOSSafari,
-          iosVersion: globalContext.browserInfo.iosVersion,
-        });
-        setGpuContext(globalContext);
-        setShaderLib(globalShaderLibrary);
-        setIsReady(true);
-        setIsFallback(false);
-        setFallbackReason(null);
-        setProgress({ percent: 100, message: 'Ready', isLoading: false });
-        
-        onReadyRef.current?.(globalContext, globalShaderLibrary);
+    // Helper to apply result to this component's state
+    const applyResult = (result: { context: WebGPUContext; shaderLibrary: ShaderLibrary }): void => {
+      if (!isCurrent()) {
         initializingRef.current = false;
-        return true;
+        return;
       }
-
-      // SYNCHRONOUS lock check - must happen before any await
-      // This prevents race conditions where two components both start initializing
-      if (globalInitLock || globalInitPromise) {
-        // Someone else is initializing, wait for their result
-        const existingPromise = globalInitPromise;
-        if (existingPromise) {
-          const result = await existingPromise;
-          if (initId !== initIdRef.current) {
-            initializingRef.current = false;
-            return false;
-          }
-          
-          if (result) {
-            globalRefCount++;
-            contextRef.current = result.context;
-            shaderLibraryRef.current = result.shaderLibrary;
-            
-            // Reconfigure for this canvas
-            result.context.reconfigure(canvas);
-            
-            const rect = canvas.getBoundingClientRect();
-            const dpr = window.devicePixelRatio || 1;
-            canvas.width = Math.floor(rect.width * dpr);
-            canvas.height = Math.floor(rect.height * dpr);
-
-            setBrowserInfo({
-              isIOSSafari: result.context.browserInfo.isIOSSafari,
-              iosVersion: result.context.browserInfo.iosVersion,
-            });
-            setGpuContext(result.context);
-            setShaderLib(result.shaderLibrary);
-            setIsReady(true);
-            setIsFallback(false);
-            setFallbackReason(null);
-            setProgress({ percent: 100, message: 'Ready', isLoading: false });
-            
-            onReadyRef.current?.(result.context, result.shaderLibrary);
-            initializingRef.current = false;
-            return true;
-          }
-        }
-        // If we got here, previous init failed - release lock and retry below
-        globalInitLock = false;
-        globalInitPromise = null;
-      }
-
-      // Claim the lock SYNCHRONOUSLY before any async work
-      globalInitLock = true;
-
-      // Start new global initialization
-      globalInitPromise = (async () => {
-        const context = new WebGPUContext();
-
-        const initialized = await context.initialize({
-          canvas,
-          powerPreference,
-          alphaMode,
-          onProgress: (p) => {
-            setProgress({
-              percent: p.percent,
-              message: p.message,
-              isLoading: p.step !== 'ready' && p.step !== 'failed',
-            });
-          },
-        });
-
-        if (!initialized || !context.device) {
-          context.destroy();
-          globalInitLock = false;
-          return null;
-        }
-
-        const shaderLibrary = new ShaderLibrary();
-        shaderLibrary.setDevice(context.device);
-        shaderLibrary.registerDefaults();
-        onRegisterShadersRef.current?.(shaderLibrary);
-
-        globalContext = context;
-        globalShaderLibrary = shaderLibrary;
-        globalInitLock = false;
-        
-        return { context, shaderLibrary };
-      })();
-
-      const result = await globalInitPromise;
-
-      // Bail out if a newer initialization replaced this one
-      if (initId !== initIdRef.current) {
-        initializingRef.current = false;
-        return false;
-      }
-
-      if (!result) {
-        // Determine fallback reason
-        let reason = 'WebGPU unavailable. Running in DOM-only mode.';
-        
-        setGpuContext(null);
-        setShaderLib(null);
-        setFallbackReason(reason);
-        setIsFallback(true);
-        setIsReady(false);
-        engine.mode = InteractionMode.DOM_INTERACTIVE;
-        onFallbackRef.current?.(reason);
-        initializingRef.current = false;
-        globalInitPromise = null;
-        globalInitLock = false;
-        return false;
-      }
-
-      globalRefCount++;
+      globalState.refCount++;
       contextRef.current = result.context;
       shaderLibraryRef.current = result.shaderLibrary;
-
-      // Store browser info for debugging
-      setBrowserInfo({
-        isIOSSafari: result.context.browserInfo.isIOSSafari,
-        iosVersion: result.context.browserInfo.iosVersion,
-      });
-
-      // Set initial viewport size
+      
+      result.context.reconfigure(canvas);
+      
       const rect = canvas.getBoundingClientRect();
       const dpr = window.devicePixelRatio || 1;
       canvas.width = Math.floor(rect.width * dpr);
       canvas.height = Math.floor(rect.height * dpr);
 
-      // Update state
+      setBrowserInfo({
+        isIOSSafari: result.context.browserInfo.isIOSSafari,
+        iosVersion: result.context.browserInfo.iosVersion,
+      });
       setGpuContext(result.context);
       setShaderLib(result.shaderLibrary);
       setIsReady(true);
       setIsFallback(false);
       setFallbackReason(null);
+      setProgress({ percent: 100, message: 'Ready', isLoading: false });
       
       onReadyRef.current?.(result.context, result.shaderLibrary);
       initializingRef.current = false;
-      return true;
-    } catch (error) {
-      console.error('[useGPU] Initialization failed:', error);
-      const reason = error instanceof Error ? error.message : 'Unknown error';
+    };
+
+    // Helper to handle failure
+    const handleFailure = (reason: string): void => {
+      if (!isCurrent()) {
+        initializingRef.current = false;
+        return;
+      }
       setGpuContext(null);
       setShaderLib(null);
       setFallbackReason(reason);
       setIsFallback(true);
       setIsReady(false);
+      setProgress({ percent: 100, message: reason, isLoading: false });
+      engine.mode = InteractionMode.DOM_INTERACTIVE;
       onFallbackRef.current?.(reason);
       initializingRef.current = false;
-      globalInitPromise = null;
-      globalInitLock = false;
+    };
+
+    // Force fallback mode for testing
+    if (forceFallback) {
+      handleFailure('Forced fallback mode (testing)');
+      return false;
+    }
+
+    try {
+      // Check if we already have a global context we can reuse
+      if (globalState.context?.isAvailable && globalState.context.device && globalState.shaderLibrary) {
+        if (globalState.destroyTimeout) {
+          clearTimeout(globalState.destroyTimeout);
+          globalState.destroyTimeout = null;
+        }
+        applyResult({ context: globalState.context, shaderLibrary: globalState.shaderLibrary });
+        return true;
+      }
+
+      // Check if someone else is already initializing - wait for them
+      if (globalState.initPromise) {
+        const result = await globalState.initPromise;
+        if (initId !== initIdRef.current) {
+          initializingRef.current = false;
+          return false;
+        }
+        
+        if (result) {
+          if (globalState.destroyTimeout) {
+            clearTimeout(globalState.destroyTimeout);
+            globalState.destroyTimeout = null;
+          }
+          applyResult(result);
+          return true;
+        }
+        // Previous init failed, we'll retry below
+        globalState.initPromise = null;
+      }
+
+      // Create promise SYNCHRONOUSLY to claim the lock before any await
+      // This prevents race conditions where two components both start initializing
+      let resolveInit!: (result: { context: WebGPUContext; shaderLibrary: ShaderLibrary } | null) => void;
+      globalState.initPromise = new Promise((resolve) => {
+        resolveInit = resolve;
+      });
+
+      // Now do the actual async initialization
+      const context = new WebGPUContext();
+
+      const initialized = await context.initialize({
+        canvas,
+        powerPreference,
+        alphaMode,
+        onProgress: (p) => {
+          setProgress({
+            percent: p.percent,
+            message: p.message,
+            isLoading: p.step !== 'ready' && p.step !== 'failed',
+          });
+        },
+      });
+
+      // Bail out if component unmounted or was replaced
+      if (!initialized || !context.device) {
+        context.destroy();
+        resolveInit(null);
+        globalState.initPromise = null;
+        handleFailure('WebGPU unavailable. Running in DOM-only mode.');
+        return false;
+      }
+
+      const shaderLibrary = new ShaderLibrary();
+      shaderLibrary.setDevice(context.device);
+      shaderLibrary.registerDefaults();
+      onRegisterShadersRef.current?.(shaderLibrary);
+
+      globalState.context = context;
+      globalState.shaderLibrary = shaderLibrary;
+      if (globalState.destroyTimeout) {
+        clearTimeout(globalState.destroyTimeout);
+        globalState.destroyTimeout = null;
+      }
+      
+      const result = { context, shaderLibrary };
+      resolveInit(result);
+
+      if (!isCurrent()) {
+        initializingRef.current = false;
+        if (globalState.refCount === 0) {
+          scheduleGlobalDestroy();
+        }
+        return true;
+      }
+
+      applyResult(result);
+      return true;
+    } catch (error) {
+      console.error('[useGPU] Initialization failed:', error);
+      globalState.initPromise = null;
+      handleFailure(error instanceof Error ? error.message : 'Unknown error');
       return false;
     }
   }, [canvasRef, powerPreference, alphaMode, engine, forceFallback]);
@@ -378,15 +363,18 @@ export function useGPU(
    */
   const reinitialize = useCallback(async (): Promise<boolean> => {
     // Decrement ref count and potentially destroy global context
-    if (contextRef.current === globalContext) {
-      globalRefCount--;
-      if (globalRefCount <= 0) {
-        globalContext?.destroy();
-        globalContext = null;
-        globalShaderLibrary = null;
-        globalInitPromise = null;
-        globalInitLock = false;
-        globalRefCount = 0;
+    if (contextRef.current === globalState.context) {
+      globalState.refCount--;
+      if (globalState.refCount <= 0) {
+        if (globalState.destroyTimeout) {
+          clearTimeout(globalState.destroyTimeout);
+          globalState.destroyTimeout = null;
+        }
+        globalState.context?.destroy();
+        globalState.context = null;
+        globalState.shaderLibrary = null;
+        globalState.initPromise = null;
+        globalState.refCount = 0;
       }
     }
     
@@ -439,15 +427,21 @@ export function useGPU(
       initializingRef.current = false;
       
       // Decrement ref count - only destroy global context when no consumers remain
-      if (contextRef.current === globalContext) {
-        globalRefCount--;
-        if (globalRefCount <= 0) {
-          globalContext?.destroy();
-          globalContext = null;
-          globalShaderLibrary = null;
-          globalInitPromise = null;
-          globalInitLock = false;
-          globalRefCount = 0;
+      if (contextRef.current === globalState.context) {
+        globalState.refCount--;
+        if (globalState.refCount <= 0) {
+          if (globalState.destroyTimeout) {
+            clearTimeout(globalState.destroyTimeout);
+          }
+          globalState.destroyTimeout = setTimeout(() => {
+            if (globalState.refCount > 0) return;
+            globalState.context?.destroy();
+            globalState.context = null;
+            globalState.shaderLibrary = null;
+            globalState.initPromise = null;
+            globalState.refCount = 0;
+            globalState.destroyTimeout = null;
+          }, 250);
         }
       }
       

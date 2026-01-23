@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
-import { WebGPUContext, ShaderLibrary, ScreenPass } from '@scene/renderer';
+import { ShaderLibrary, ScreenPass, type WebGPUContext } from '@scene/renderer';
+import { acquireSharedWebGPUContext } from '../../../lib/webgpu';
 import {
   EffectStack,
   createBlurEffect,
@@ -46,6 +47,7 @@ function EffectStackDemo() {
     let isActive = true;
     let rafId: number | null = null;
     let context: WebGPUContext | null = null;
+    let releaseContext: (() => void) | null = null;
     let screenPass: ScreenPass | null = null;
     let sourceTexture: GPUTexture | null = null;
     let animationTime = 0;
@@ -53,18 +55,22 @@ function EffectStackDemo() {
     const initialize = async (canvas: HTMLCanvasElement): Promise<void> => {
       addStatus('Initializing WebGPU...', 'info');
 
-      context = new WebGPUContext();
-      const initialized = await context.initialize({
-        canvas,
+      const { context: sharedContext, initialized, reused, release } = await acquireSharedWebGPUContext(canvas, {
         powerPreference: 'high-performance',
       });
+      if (!isActive) {
+        release();
+        return;
+      }
+      releaseContext = release;
+      context = sharedContext;
 
-      if (!initialized) {
+      if (!initialized || !context) {
         addStatus('WebGPU not available - demo cannot run.', 'warning');
         return;
       }
 
-      addStatus('WebGPU initialized.', 'success');
+      addStatus(reused ? 'Reusing WebGPU context.' : 'WebGPU initialized.', reused ? 'info' : 'success');
 
       const device = context.device;
       if (!device) {
@@ -176,7 +182,8 @@ function EffectStackDemo() {
       }
       effectStackRef.current?.destroy();
       screenPass?.destroy();
-      context?.destroy();
+      releaseContext?.();
+      releaseContext = null;
       sourceTexture?.destroy();
     };
   }, [addStatus]);

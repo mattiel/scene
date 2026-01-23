@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
-import { WebGPUContext, ShaderLibrary } from '@scene/renderer';
+import { ShaderLibrary, type WebGPUContext } from '@scene/renderer';
+import { acquireSharedWebGPUContext } from '../../../lib/webgpu';
 import type { TransitionType, WipeDirection } from '@scene/screen';
 import { TransitionEffect, registerTransitionShaders } from '@scene/screen';
 import { DemoLayout } from '../../../components/DemoLayout';
@@ -61,6 +62,7 @@ function TransitionDemo() {
     let isActive = true;
     let rafId: number | null = null;
     let context: WebGPUContext | null = null;
+    let releaseContext: (() => void) | null = null;
     let shaderLibrary: ShaderLibrary | null = null;
 
     const renderColorToTexture = (texture: GPUTexture, color: GPUColor): void => {
@@ -83,18 +85,22 @@ function TransitionDemo() {
     const initialize = async (canvas: HTMLCanvasElement): Promise<void> => {
       addStatus('Initializing WebGPU...', 'info');
 
-      context = new WebGPUContext();
-      const initialized = await context.initialize({
-        canvas,
+      const { context: sharedContext, initialized, reused, release } = await acquireSharedWebGPUContext(canvas, {
         powerPreference: 'high-performance',
       });
+      if (!isActive) {
+        release();
+        return;
+      }
+      releaseContext = release;
+      context = sharedContext;
 
-      if (!initialized) {
+      if (!initialized || !context) {
         addStatus('WebGPU not available - demo cannot run.', 'warning');
         return;
       }
 
-      addStatus('WebGPU initialized.', 'success');
+      addStatus(reused ? 'Reusing WebGPU context.' : 'WebGPU initialized.', reused ? 'info' : 'success');
       contextRef.current = context;
 
       const device = context.device;
@@ -162,7 +168,8 @@ function TransitionDemo() {
         cancelAnimationFrame(rafId);
       }
       transitionRef.current?.destroy();
-      context?.destroy();
+      releaseContext?.();
+      releaseContext = null;
       texturesRef.current.a?.destroy();
       texturesRef.current.b?.destroy();
     };
