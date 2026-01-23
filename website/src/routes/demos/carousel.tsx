@@ -410,15 +410,34 @@ function CarouselDemo() {
       // Find clicked card
       let closestIndex = -1;
       let closestDist = Infinity;
+      const currentExpandProgress = expandMotion.value;
 
       for (let i = 0; i < CARD_DATA.length; i++) {
-        const x = (i - midIndex) * config.cardSpacing + offset;
-        const itemX = centerX + x;
+        const baseX = (i - midIndex) * config.cardSpacing + offset;
+        
+        // Account for expanded card position and size
+        const isExpandedCard = i === expandedIndex && currentExpandProgress > 0.01;
+        let itemX: number;
+        let hitWidth: number;
+        let hitHeight: number;
+        
+        if (isExpandedCard) {
+          // Expanded card moves toward center and is scaled up
+          itemX = centerX + baseX * (1 - currentExpandProgress); // lerp toward center
+          const scale = 1 + currentExpandProgress * config.expandScale;
+          hitWidth = config.cardWidth * scale;
+          hitHeight = config.cardHeight * scale;
+        } else {
+          itemX = centerX + baseX;
+          hitWidth = config.cardWidth;
+          hitHeight = config.cardHeight;
+        }
+        
         const itemY = centerY;
         const dx = Math.abs(clickX - itemX);
         const dy = Math.abs(clickY - itemY);
 
-        if (dx < config.cardWidth / 2 + 30 && dy < config.cardHeight / 2 + 30) {
+        if (dx < hitWidth / 2 + 30 && dy < hitHeight / 2 + 30) {
           const dist = dx + dy;
           if (dist < closestDist) {
             closestDist = dist;
@@ -429,12 +448,28 @@ function CarouselDemo() {
 
       if (closestIndex >= 0) {
         const card = CARD_DATA[closestIndex];
-        const cardX = (closestIndex - midIndex) * config.cardSpacing + offset;
-        const cardCenterX = centerX + cardX;
+        const baseCardX = (closestIndex - midIndex) * config.cardSpacing + offset;
+        
+        // Use expanded position and size for ripple origin calculation
+        const isExpandedCard = closestIndex === expandedIndex && currentExpandProgress > 0.01;
+        let cardCenterX: number;
+        let cardWidth: number;
+        let cardHeight: number;
+        
+        if (isExpandedCard) {
+          cardCenterX = centerX + baseCardX * (1 - currentExpandProgress);
+          const scale = 1 + currentExpandProgress * config.expandScale;
+          cardWidth = config.cardWidth * scale;
+          cardHeight = config.cardHeight * scale;
+        } else {
+          cardCenterX = centerX + baseCardX;
+          cardWidth = config.cardWidth;
+          cardHeight = config.cardHeight;
+        }
         const cardCenterY = centerY;
 
-        const relativeX = (clickX - cardCenterX) / config.cardWidth + 0.5;
-        const relativeY = (clickY - cardCenterY) / config.cardHeight + 0.5;
+        const relativeX = (clickX - cardCenterX) / cardWidth + 0.5;
+        const relativeY = (clickY - cardCenterY) / cardHeight + 0.5;
 
         anim.ripples.set(card.id, {
           originX: clamp(relativeX, 0, 1),
