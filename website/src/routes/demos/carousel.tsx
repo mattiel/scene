@@ -75,7 +75,7 @@ interface AnimationState {
   introStartOffset: number;
   introTargetOffset: number;
   currentVisualOffset: number;
-  /** Track last texture threshold per card to avoid redundant updates */
+  /** Track last rendered expand progress per card for delta-based updates */
   lastTextureThreshold: Map<string, number>;
   /** Track last canvas dimensions to avoid redundant resizes */
   lastCanvasDims: { width: number; height: number };
@@ -657,27 +657,28 @@ function CarouselDemo() {
           el.style.opacity = String(opacity);
         }
 
-        // Update card texture at discrete thresholds only (not every frame)
-        // This is the key mobile performance optimization - reduces texture updates
-        // from 60/sec to ~5 per expansion animation
+        // Update card texture with delta-based throttling for smooth animation
+        // Desktop: update frequently (delta 0.02 = ~50 updates per animation)
+        // Mobile: update less often (delta 0.04 = ~25 updates) since texture is smaller
         const cardExpandProgress = isActiveCard ? expandProgress : 0;
         if (rendererReady && renderer && textureRenderer && (isActiveCard || isCollapseComplete)) {
-          // Thresholds aligned with visual changes (description fades in at 0.3)
-          const TEXTURE_THRESHOLDS = [0, 0.15, 0.3, 0.5, 0.7, 0.85, 1.0];
           const targetProgress = isCollapseComplete ? 0 : cardExpandProgress;
+          const lastProgress = anim.lastTextureThreshold.get(card.id) ?? -1;
           
-          // Find the nearest threshold
-          let threshold = 0;
-          for (const t of TEXTURE_THRESHOLDS) {
-            if (targetProgress >= t) threshold = t;
-            else break;
-          }
+          // Use larger delta on mobile for better performance
+          const isMobile = window.innerWidth < 640;
+          const minDelta = isMobile ? 0.04 : 0.02;
           
-          // Only update texture when crossing a threshold
-          const lastThreshold = anim.lastTextureThreshold.get(card.id) ?? -1;
-          if (threshold !== lastThreshold) {
-            anim.lastTextureThreshold.set(card.id, threshold);
-            const updatedCanvas = textureRenderer.render(card, index, config, threshold);
+          // Update when: first render, progress changed significantly, or animation complete
+          const shouldUpdate = 
+            lastProgress < 0 || 
+            Math.abs(targetProgress - lastProgress) >= minDelta ||
+            targetProgress === 0 || 
+            targetProgress >= 0.99;
+          
+          if (shouldUpdate) {
+            anim.lastTextureThreshold.set(card.id, targetProgress);
+            const updatedCanvas = textureRenderer.render(card, index, config, targetProgress);
             renderer.updateCardTexture(card.id, updatedCanvas);
           }
         }
