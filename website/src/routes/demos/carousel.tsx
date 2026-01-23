@@ -411,17 +411,21 @@ function CarouselDemo() {
       let closestIndex = -1;
       let closestDist = Infinity;
       const currentExpandProgress = expandMotion.value;
+      
+      // Check which card is visually expanded (could be collapsing)
+      const isCollapsing = expandedIndex === -1 && anim.lastExpandedIndex >= 0 && currentExpandProgress > 0.01;
+      const visuallyExpandedIndex = isCollapsing ? anim.lastExpandedIndex : expandedIndex;
 
       for (let i = 0; i < CARD_DATA.length; i++) {
         const baseX = (i - midIndex) * config.cardSpacing + offset;
         
-        // Account for expanded card position and size
-        const isExpandedCard = i === expandedIndex && currentExpandProgress > 0.01;
+        // Account for expanded/collapsing card position and size
+        const isVisuallyExpanded = i === visuallyExpandedIndex && currentExpandProgress > 0.01;
         let itemX: number;
         let hitWidth: number;
         let hitHeight: number;
         
-        if (isExpandedCard) {
+        if (isVisuallyExpanded) {
           // Expanded card moves toward center and is scaled up
           itemX = centerX + baseX * (1 - currentExpandProgress); // lerp toward center
           const scale = 1 + currentExpandProgress * config.expandScale;
@@ -451,12 +455,12 @@ function CarouselDemo() {
         const baseCardX = (closestIndex - midIndex) * config.cardSpacing + offset;
         
         // Use expanded position and size for ripple origin calculation
-        const isExpandedCard = closestIndex === expandedIndex && currentExpandProgress > 0.01;
+        const isVisuallyExpandedCard = closestIndex === visuallyExpandedIndex && currentExpandProgress > 0.01;
         let cardCenterX: number;
         let cardWidth: number;
         let cardHeight: number;
         
-        if (isExpandedCard) {
+        if (isVisuallyExpandedCard) {
           cardCenterX = centerX + baseCardX * (1 - currentExpandProgress);
           const scale = 1 + currentExpandProgress * config.expandScale;
           cardWidth = config.cardWidth * scale;
