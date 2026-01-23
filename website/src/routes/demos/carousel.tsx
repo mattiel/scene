@@ -409,50 +409,31 @@ function CarouselDemo() {
 
       // Find clicked card
       let closestIndex = -1;
-      const currentExpandProgress = expandMotion.value;
       
-      // Check which card is visually expanded (could be collapsing)
-      const isCollapsing = expandedIndex === -1 && anim.lastExpandedIndex >= 0 && currentExpandProgress > 0.01;
-      const visuallyExpandedIndex = isCollapsing ? anim.lastExpandedIndex : expandedIndex;
-
-      // DEBUG: Log state before hit detection
-      console.log('[TAP DEBUG] State:', {
-        expandedIndex,
-        lastExpandedIndex: anim.lastExpandedIndex,
-        currentExpandProgress,
-        isCollapsing,
-        visuallyExpandedIndex,
-        willCheckExpanded: visuallyExpandedIndex >= 0 && currentExpandProgress > 0.01,
-        click: { x: clickX, y: clickY },
-      });
+      // Use expandedIndex directly - don't rely on motion value which can be stale in callback
+      // If expandedIndex >= 0, a card is expanded and should get priority hit detection
+      const visuallyExpandedIndex = expandedIndex;
 
       // PRIORITY: Check expanded card FIRST - it's visually in front
       // If click is within its bounds, it wins regardless of other cards
-      if (visuallyExpandedIndex >= 0 && currentExpandProgress > 0.01) {
+      if (visuallyExpandedIndex >= 0) {
         const i = visuallyExpandedIndex;
         
-        // For the expanded card, use a generous hit zone based on screen size
-        // The GPU perspective projection makes the card appear larger than simple math predicts
-        // At full expansion, the card dominates the screen - use ~80% of screen as hit zone
-        const expandedHitWidth = window.innerWidth * 0.8 * currentExpandProgress + config.cardWidth * (1 - currentExpandProgress);
-        const expandedHitHeight = window.innerHeight * 0.8 * currentExpandProgress + config.cardHeight * (1 - currentExpandProgress);
+        // For the expanded card, use a generous hit zone (80% of screen)
+        // The card dominates the screen when expanded
+        const expandedHitWidth = window.innerWidth * 0.8;
+        const expandedHitHeight = window.innerHeight * 0.8;
         
-        // Card moves toward center as it expands
-        const baseX = (i - midIndex) * config.cardSpacing + offset;
-        const itemX = centerX + baseX * (1 - currentExpandProgress);
-        
-        const dx = Math.abs(clickX - itemX);
+        // Expanded card is centered on screen
+        const dx = Math.abs(clickX - centerX);
         const dy = Math.abs(clickY - centerY);
 
-        // DEBUG: Log hit detection values
-        console.log('[HIT DEBUG] Expanded card check:', {
-          visuallyExpandedIndex,
-          expandProgress: currentExpandProgress,
+        console.log('[HIT DEBUG] Expanded card:', {
+          expandedIndex,
           click: { x: clickX, y: clickY },
-          cardCenter: { x: itemX, y: centerY },
+          center: { x: centerX, y: centerY },
           hitSize: { w: expandedHitWidth, h: expandedHitHeight },
           distance: { dx, dy },
-          maxDist: { x: expandedHitWidth / 2, y: expandedHitHeight / 2 },
           isHit: dx < expandedHitWidth / 2 && dy < expandedHitHeight / 2,
         });
 
@@ -467,7 +448,7 @@ function CarouselDemo() {
         let closestDist = Infinity;
         for (let i = 0; i < CARD_DATA.length; i++) {
           // Skip the expanded card (already checked above)
-          if (i === visuallyExpandedIndex && currentExpandProgress > 0.01) continue;
+          if (i === visuallyExpandedIndex) continue;
           
           const baseX = (i - midIndex) * config.cardSpacing + offset;
           const itemX = centerX + baseX;
@@ -492,22 +473,17 @@ function CarouselDemo() {
         const baseCardX = (closestIndex - midIndex) * config.cardSpacing + offset;
         
         // Use expanded position and size for ripple origin calculation
-        const isVisuallyExpandedCard = closestIndex === visuallyExpandedIndex && currentExpandProgress > 0.01;
+        const isVisuallyExpandedCard = closestIndex === visuallyExpandedIndex;
         let cardCenterX: number;
         let cardWidth: number;
         let cardHeight: number;
         
         if (isVisuallyExpandedCard) {
-          // Match perspective calculation from hit detection
-          const finalZ = currentExpandProgress * 300;
-          const perspective = config.cameraZ / (config.cameraZ - finalZ);
-          const baseScale = 1 + currentExpandProgress * config.expandScale;
-          const totalScale = perspective * baseScale;
-          
-          const finalX = baseCardX * (1 - currentExpandProgress);
-          cardCenterX = centerX + finalX * perspective;
-          cardWidth = config.cardWidth * totalScale;
-          cardHeight = config.cardHeight * totalScale;
+          // Expanded card is centered with larger visual size
+          cardCenterX = centerX;
+          // Use approximate visual size for ripple origin
+          cardWidth = config.cardWidth * 2;
+          cardHeight = config.cardHeight * 2;
         } else {
           cardCenterX = centerX + baseCardX;
           cardWidth = config.cardWidth;
