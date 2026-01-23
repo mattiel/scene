@@ -72,8 +72,11 @@ export class CardTextureRenderer {
     config: CarouselConfig,
     expandProgress = 0
   ): HTMLCanvasElement {
-    const dpr = window.devicePixelRatio || 1;
-    const textureScale = 2; // Extra scale for crisp text when zoomed
+    // Cap DPR at 2 for performance (3x on iPhone is excessive for textures)
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    // Use lower texture scale on mobile - still crisp enough when zoomed
+    const isMobile = window.innerWidth < 640;
+    const textureScale = isMobile ? 1 : 2;
     const totalScale = dpr * textureScale;
 
     const expectedWidth = Math.floor(config.cardWidth * totalScale);
@@ -99,9 +102,9 @@ export class CardTextureRenderer {
     ctx.save();
     ctx.setTransform(totalScale, 0, 0, totalScale, 0, 0);
 
-    // Enable high-quality rendering
+    // Enable image smoothing (use medium quality on mobile for performance)
     ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
+    ctx.imageSmoothingQuality = isMobile ? 'medium' : 'high';
 
     // Clear canvas
     ctx.clearRect(0, 0, config.cardWidth, config.cardHeight);

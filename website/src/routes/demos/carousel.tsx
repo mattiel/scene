@@ -75,6 +75,10 @@ interface AnimationState {
   introStartOffset: number;
   introTargetOffset: number;
   currentVisualOffset: number;
+  /** Track last texture threshold per card to avoid redundant updates */
+  lastTextureThreshold: Map<string, number>;
+  /** Track last canvas dimensions to avoid redundant resizes */
+  lastCanvasDims: { width: number; height: number };
 }
 
 function createInitialAnimState(): AnimationState {
@@ -91,6 +95,8 @@ function createInitialAnimState(): AnimationState {
     introStartOffset: 0,
     introTargetOffset: 0,
     currentVisualOffset: 0,
+    lastTextureThreshold: new Map(),
+    lastCanvasDims: { width: 0, height: 0 },
   };
 }
 
@@ -224,7 +230,10 @@ function CarouselDemo() {
         setRendererReady(false);
         if (cancelled || initId !== rendererInitRef.current) return;
 
-        const renderer = new FabricWaveRenderer(gpu.context!, { cameraZ: config.cameraZ });
+        const renderer = new FabricWaveRenderer(gpu.context!, { 
+          cameraZ: config.cameraZ,
+          segments: config.segments,
+        });
         const initialized = await renderer.initialize();
         if (!initialized) {
           renderer.destroy();
@@ -505,14 +514,20 @@ function CarouselDemo() {
       const canvas = canvasRef.current;
       const textureRenderer = textureRendererRef.current;
 
-      // Ensure viewport is set
+      // Ensure viewport is set (only resize when dimensions actually change)
       if (canvas && renderer) {
         const rect = canvas.getBoundingClientRect();
-        const width = rect.width * (window.devicePixelRatio || 1);
-        const height = rect.height * (window.devicePixelRatio || 1);
+        const dpr = window.devicePixelRatio || 1;
+        const width = Math.round(rect.width * dpr);
+        const height = Math.round(rect.height * dpr);
         if (width > 0 && height > 0) {
-          canvas.width = width;
-          canvas.height = height;
+          // Only update canvas dimensions when they actually change
+          // Setting canvas.width/height triggers buffer reallocation
+          if (anim.lastCanvasDims.width !== width || anim.lastCanvasDims.height !== height) {
+            canvas.width = width;
+            canvas.height = height;
+            anim.lastCanvasDims = { width, height };
+          }
           renderer.setViewport(rect.width, rect.height);
         }
       }
@@ -642,16 +657,29 @@ function CarouselDemo() {
           el.style.opacity = String(opacity);
         }
 
-        // Update card texture during expansion/collapse
+        // Update card texture at discrete thresholds only (not every frame)
+        // This is the key mobile performance optimization - reduces texture updates
+        // from 60/sec to ~5 per expansion animation
         const cardExpandProgress = isActiveCard ? expandProgress : 0;
         if (rendererReady && renderer && textureRenderer && (isActiveCard || isCollapseComplete)) {
-          const updatedCanvas = textureRenderer.render(
-            card,
-            index,
-            config,
-            isCollapseComplete ? 0 : cardExpandProgress
-          );
-          renderer.updateCardTexture(card.id, updatedCanvas);
+          // Thresholds aligned with visual changes (description fades in at 0.3)
+          const TEXTURE_THRESHOLDS = [0, 0.15, 0.3, 0.5, 0.7, 0.85, 1.0];
+          const targetProgress = isCollapseComplete ? 0 : cardExpandProgress;
+          
+          // Find the nearest threshold
+          let threshold = 0;
+          for (const t of TEXTURE_THRESHOLDS) {
+            if (targetProgress >= t) threshold = t;
+            else break;
+          }
+          
+          // Only update texture when crossing a threshold
+          const lastThreshold = anim.lastTextureThreshold.get(card.id) ?? -1;
+          if (threshold !== lastThreshold) {
+            anim.lastTextureThreshold.set(card.id, threshold);
+            const updatedCanvas = textureRenderer.render(card, index, config, threshold);
+            renderer.updateCardTexture(card.id, updatedCanvas);
+          }
         }
 
         if (isCollapseComplete) {
@@ -687,7 +715,10 @@ function CarouselDemo() {
         renderer.render([0.02, 0.02, 0.05, 1]);
       }
 
-      layoutTracker.forceUpdate();
+      // Only update layout tracker when not mid-animation (reduces DOM queries)
+      if (expandProgress < 0.01 || expandProgress > 0.99) {
+        layoutTracker.forceUpdate();
+      }
     },
     { enabled: true }
   );
