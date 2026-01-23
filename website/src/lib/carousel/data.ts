@@ -30,6 +30,8 @@ export interface CarouselConfig {
   bendScale: number;
   bendClamp: number;
   expandScale: number;
+  /** Geometry segments for fabric wave effect (lower = better mobile perf) */
+  segments: number;
 }
 
 // ============================================
@@ -45,6 +47,7 @@ export const BASE_CONFIG: CarouselConfig = {
   bendScale: 3.0,
   bendClamp: 1.2,
   expandScale: 0.6, // 1 + 0.6 = 1.6x at full expand
+  segments: 32,     // Desktop: 32 segments for smooth fabric wave
 };
 
 export const CARD_THEMES = [

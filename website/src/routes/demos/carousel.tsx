@@ -75,6 +75,10 @@ interface AnimationState {
   introStartOffset: number;
   introTargetOffset: number;
   currentVisualOffset: number;
+  /** Track last rendered expand progress per card for delta-based updates */
+  lastTextureThreshold: Map<string, number>;
+  /** Track last canvas dimensions to avoid redundant resizes */
+  lastCanvasDims: { width: number; height: number };
 }
 
 function createInitialAnimState(): AnimationState {
@@ -91,6 +95,8 @@ function createInitialAnimState(): AnimationState {
     introStartOffset: 0,
     introTargetOffset: 0,
     currentVisualOffset: 0,
+    lastTextureThreshold: new Map(),
+    lastCanvasDims: { width: 0, height: 0 },
   };
 }
 
@@ -224,7 +230,10 @@ function CarouselDemo() {
         setRendererReady(false);
         if (cancelled || initId !== rendererInitRef.current) return;
 
-        const renderer = new FabricWaveRenderer(gpu.context!, { cameraZ: config.cameraZ });
+        const renderer = new FabricWaveRenderer(gpu.context!, { 
+          cameraZ: config.cameraZ,
+          segments: config.segments,
+        });
         const initialized = await renderer.initialize();
         if (!initialized) {
           renderer.destroy();
@@ -400,32 +409,81 @@ function CarouselDemo() {
 
       // Find clicked card
       let closestIndex = -1;
-      let closestDist = Infinity;
+      
+      // Use expandedIndex directly - don't rely on motion value which can be stale in callback
+      // If expandedIndex >= 0, a card is expanded and should get priority hit detection
+      const visuallyExpandedIndex = expandedIndex;
 
-      for (let i = 0; i < CARD_DATA.length; i++) {
-        const x = (i - midIndex) * config.cardSpacing + offset;
-        const itemX = centerX + x;
-        const itemY = centerY;
-        const dx = Math.abs(clickX - itemX);
-        const dy = Math.abs(clickY - itemY);
+      // PRIORITY: Check expanded card FIRST - it's visually in front
+      // If click is within its bounds, it wins regardless of other cards
+      if (visuallyExpandedIndex >= 0) {
+        const i = visuallyExpandedIndex;
+        
+        // For the expanded card, use a generous hit zone (80% of screen)
+        // The card dominates the screen when expanded
+        const expandedHitWidth = window.innerWidth * 0.8;
+        const expandedHitHeight = window.innerHeight * 0.8;
+        
+        // Expanded card is centered on screen
+        const dx = Math.abs(clickX - centerX);
+        const dy = Math.abs(clickY - centerY);
 
-        if (dx < config.cardWidth / 2 + 30 && dy < config.cardHeight / 2 + 30) {
-          const dist = dx + dy;
-          if (dist < closestDist) {
-            closestDist = dist;
-            closestIndex = i;
+        // If click is within expanded card, it takes priority
+        if (dx < expandedHitWidth / 2 && dy < expandedHitHeight / 2) {
+          closestIndex = i;
+        }
+      }
+
+      // Only check other cards if expanded card wasn't hit
+      if (closestIndex < 0) {
+        let closestDist = Infinity;
+        for (let i = 0; i < CARD_DATA.length; i++) {
+          // Skip the expanded card (already checked above)
+          if (i === visuallyExpandedIndex) continue;
+          
+          const baseX = (i - midIndex) * config.cardSpacing + offset;
+          const itemX = centerX + baseX;
+          const hitWidth = config.cardWidth;
+          const hitHeight = config.cardHeight;
+          
+          const dx = Math.abs(clickX - itemX);
+          const dy = Math.abs(clickY - centerY);
+
+          if (dx < hitWidth / 2 + 30 && dy < hitHeight / 2 + 30) {
+            const dist = dx + dy;
+            if (dist < closestDist) {
+              closestDist = dist;
+              closestIndex = i;
+            }
           }
         }
       }
 
       if (closestIndex >= 0) {
         const card = CARD_DATA[closestIndex];
-        const cardX = (closestIndex - midIndex) * config.cardSpacing + offset;
-        const cardCenterX = centerX + cardX;
+        const baseCardX = (closestIndex - midIndex) * config.cardSpacing + offset;
+        
+        // Use expanded position and size for ripple origin calculation
+        const isVisuallyExpandedCard = closestIndex === visuallyExpandedIndex;
+        let cardCenterX: number;
+        let cardWidth: number;
+        let cardHeight: number;
+        
+        if (isVisuallyExpandedCard) {
+          // Expanded card is centered with larger visual size
+          cardCenterX = centerX;
+          // Use approximate visual size for ripple origin
+          cardWidth = config.cardWidth * 2;
+          cardHeight = config.cardHeight * 2;
+        } else {
+          cardCenterX = centerX + baseCardX;
+          cardWidth = config.cardWidth;
+          cardHeight = config.cardHeight;
+        }
         const cardCenterY = centerY;
 
-        const relativeX = (clickX - cardCenterX) / config.cardWidth + 0.5;
-        const relativeY = (clickY - cardCenterY) / config.cardHeight + 0.5;
+        const relativeX = (clickX - cardCenterX) / cardWidth + 0.5;
+        const relativeY = (clickY - cardCenterY) / cardHeight + 0.5;
 
         anim.ripples.set(card.id, {
           originX: clamp(relativeX, 0, 1),
@@ -505,14 +563,20 @@ function CarouselDemo() {
       const canvas = canvasRef.current;
       const textureRenderer = textureRendererRef.current;
 
-      // Ensure viewport is set
+      // Ensure viewport is set (only resize when dimensions actually change)
       if (canvas && renderer) {
         const rect = canvas.getBoundingClientRect();
-        const width = rect.width * (window.devicePixelRatio || 1);
-        const height = rect.height * (window.devicePixelRatio || 1);
+        const dpr = window.devicePixelRatio || 1;
+        const width = Math.round(rect.width * dpr);
+        const height = Math.round(rect.height * dpr);
         if (width > 0 && height > 0) {
-          canvas.width = width;
-          canvas.height = height;
+          // Only update canvas dimensions when they actually change
+          // Setting canvas.width/height triggers buffer reallocation
+          if (anim.lastCanvasDims.width !== width || anim.lastCanvasDims.height !== height) {
+            canvas.width = width;
+            canvas.height = height;
+            anim.lastCanvasDims = { width, height };
+          }
           renderer.setViewport(rect.width, rect.height);
         }
       }
@@ -642,16 +706,30 @@ function CarouselDemo() {
           el.style.opacity = String(opacity);
         }
 
-        // Update card texture during expansion/collapse
+        // Update card texture with delta-based throttling for smooth animation
+        // Desktop: update frequently (delta 0.02 = ~50 updates per animation)
+        // Mobile: update less often (delta 0.04 = ~25 updates) since texture is smaller
         const cardExpandProgress = isActiveCard ? expandProgress : 0;
         if (rendererReady && renderer && textureRenderer && (isActiveCard || isCollapseComplete)) {
-          const updatedCanvas = textureRenderer.render(
-            card,
-            index,
-            config,
-            isCollapseComplete ? 0 : cardExpandProgress
-          );
-          renderer.updateCardTexture(card.id, updatedCanvas);
+          const targetProgress = isCollapseComplete ? 0 : cardExpandProgress;
+          const lastProgress = anim.lastTextureThreshold.get(card.id) ?? -1;
+          
+          // Use larger delta on mobile for better performance
+          const isMobile = window.innerWidth < 640;
+          const minDelta = isMobile ? 0.04 : 0.02;
+          
+          // Update when: first render, progress changed significantly, or animation complete
+          const shouldUpdate = 
+            lastProgress < 0 || 
+            Math.abs(targetProgress - lastProgress) >= minDelta ||
+            targetProgress === 0 || 
+            targetProgress >= 0.99;
+          
+          if (shouldUpdate) {
+            anim.lastTextureThreshold.set(card.id, targetProgress);
+            const updatedCanvas = textureRenderer.render(card, index, config, targetProgress);
+            renderer.updateCardTexture(card.id, updatedCanvas);
+          }
         }
 
         if (isCollapseComplete) {
@@ -687,7 +765,10 @@ function CarouselDemo() {
         renderer.render([0.02, 0.02, 0.05, 1]);
       }
 
-      layoutTracker.forceUpdate();
+      // Only update layout tracker when not mid-animation (reduces DOM queries)
+      if (expandProgress < 0.01 || expandProgress > 0.99) {
+        layoutTracker.forceUpdate();
+      }
     },
     { enabled: true }
   );

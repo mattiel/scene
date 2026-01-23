@@ -85,6 +85,7 @@ function calculateConfig(): CarouselConfig {
       bendScale: 2.0,
       bendClamp: 0.8,
       expandScale,
+      segments: 16, // Reduced for mobile performance
     };
   }
 
@@ -103,6 +104,7 @@ function calculateConfig(): CarouselConfig {
       bendScale: 2.5,
       bendClamp: 1.0,
       expandScale,
+      segments: 24, // Balanced for tablet
     };
   }
 
