@@ -430,18 +430,16 @@ function CarouselDemo() {
       // If click is within its bounds, it wins regardless of other cards
       if (visuallyExpandedIndex >= 0 && currentExpandProgress > 0.01) {
         const i = visuallyExpandedIndex;
+        
+        // For the expanded card, use a generous hit zone based on screen size
+        // The GPU perspective projection makes the card appear larger than simple math predicts
+        // At full expansion, the card dominates the screen - use ~80% of screen as hit zone
+        const expandedHitWidth = window.innerWidth * 0.8 * currentExpandProgress + config.cardWidth * (1 - currentExpandProgress);
+        const expandedHitHeight = window.innerHeight * 0.8 * currentExpandProgress + config.cardHeight * (1 - currentExpandProgress);
+        
+        // Card moves toward center as it expands
         const baseX = (i - midIndex) * config.cardSpacing + offset;
-        
-        // Expanded card calculation with perspective
-        const finalZ = currentExpandProgress * 300;
-        const perspective = config.cameraZ / (config.cameraZ - finalZ);
-        const baseScale = 1 + currentExpandProgress * config.expandScale;
-        const totalScale = perspective * baseScale;
-        
-        const finalX = baseX * (1 - currentExpandProgress);
-        const itemX = centerX + finalX * perspective;
-        const hitWidth = config.cardWidth * totalScale;
-        const hitHeight = config.cardHeight * totalScale;
+        const itemX = centerX + baseX * (1 - currentExpandProgress);
         
         const dx = Math.abs(clickX - itemX);
         const dy = Math.abs(clickY - centerY);
@@ -452,14 +450,14 @@ function CarouselDemo() {
           expandProgress: currentExpandProgress,
           click: { x: clickX, y: clickY },
           cardCenter: { x: itemX, y: centerY },
-          hitSize: { w: hitWidth, h: hitHeight },
+          hitSize: { w: expandedHitWidth, h: expandedHitHeight },
           distance: { dx, dy },
-          maxDist: { x: hitWidth / 2 + 30, y: hitHeight / 2 + 30 },
-          isHit: dx < hitWidth / 2 + 30 && dy < hitHeight / 2 + 30,
+          maxDist: { x: expandedHitWidth / 2, y: expandedHitHeight / 2 },
+          isHit: dx < expandedHitWidth / 2 && dy < expandedHitHeight / 2,
         });
 
         // If click is within expanded card, it takes priority
-        if (dx < hitWidth / 2 + 30 && dy < hitHeight / 2 + 30) {
+        if (dx < expandedHitWidth / 2 && dy < expandedHitHeight / 2) {
           closestIndex = i;
         }
       }
