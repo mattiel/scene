@@ -426,11 +426,18 @@ function CarouselDemo() {
         let hitHeight: number;
         
         if (isVisuallyExpanded) {
-          // Expanded card moves toward center and is scaled up
-          itemX = centerX + baseX * (1 - currentExpandProgress); // lerp toward center
-          const scale = 1 + currentExpandProgress * config.expandScale;
-          hitWidth = config.cardWidth * scale;
-          hitHeight = config.cardHeight * scale;
+          // Expanded card moves toward center, is scaled up, AND has perspective applied
+          // Match the render loop: finalZ = expandProgress * 300, perspective = cameraZ / (cameraZ - z)
+          const finalZ = currentExpandProgress * 300;
+          const perspective = config.cameraZ / (config.cameraZ - finalZ);
+          const baseScale = 1 + currentExpandProgress * config.expandScale;
+          const totalScale = perspective * baseScale;
+          
+          // Position also affected by perspective: projectedX = finalX * perspective
+          const finalX = baseX * (1 - currentExpandProgress); // lerp toward 0
+          itemX = centerX + finalX * perspective;
+          hitWidth = config.cardWidth * totalScale;
+          hitHeight = config.cardHeight * totalScale;
         } else {
           itemX = centerX + baseX;
           hitWidth = config.cardWidth;
@@ -461,10 +468,16 @@ function CarouselDemo() {
         let cardHeight: number;
         
         if (isVisuallyExpandedCard) {
-          cardCenterX = centerX + baseCardX * (1 - currentExpandProgress);
-          const scale = 1 + currentExpandProgress * config.expandScale;
-          cardWidth = config.cardWidth * scale;
-          cardHeight = config.cardHeight * scale;
+          // Match perspective calculation from hit detection
+          const finalZ = currentExpandProgress * 300;
+          const perspective = config.cameraZ / (config.cameraZ - finalZ);
+          const baseScale = 1 + currentExpandProgress * config.expandScale;
+          const totalScale = perspective * baseScale;
+          
+          const finalX = baseCardX * (1 - currentExpandProgress);
+          cardCenterX = centerX + finalX * perspective;
+          cardWidth = config.cardWidth * totalScale;
+          cardHeight = config.cardHeight * totalScale;
         } else {
           cardCenterX = centerX + baseCardX;
           cardWidth = config.cardWidth;
