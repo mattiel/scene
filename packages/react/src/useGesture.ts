@@ -148,6 +148,8 @@ interface GestureState {
   snapTo: Point;
   snapProgress: number;
   snapVelocity: Point;
+  // Wheel inactivity timeout for elastic snap-back
+  wheelTimeout: ReturnType<typeof setTimeout> | null;
 }
 
 // ============================================
@@ -282,6 +284,7 @@ export function useGesture(options: UseGestureOptions = {}): UseGestureReturn {
     snapTo: { x: 0, y: 0 },
     snapProgress: 0,
     snapVelocity: { x: 0, y: 0 },
+    wheelTimeout: null,
   });
 
   // Stop any running animations
@@ -293,6 +296,10 @@ export function useGesture(options: UseGestureOptions = {}): UseGestureReturn {
     if (state.current.snapRaf) {
       cancelAnimationFrame(state.current.snapRaf);
       state.current.snapRaf = null;
+    }
+    if (state.current.wheelTimeout) {
+      clearTimeout(state.current.wheelTimeout);
+      state.current.wheelTimeout = null;
     }
   }, []);
 
@@ -648,6 +655,14 @@ export function useGesture(options: UseGestureOptions = {}): UseGestureReturn {
     (event: WheelEvent) => {
       if (!wheel) return;
 
+      const s = state.current;
+
+      // Clear existing wheel timeout
+      if (s.wheelTimeout) {
+        clearTimeout(s.wheelTimeout);
+        s.wheelTimeout = null;
+      }
+
       const delta = {
         x: event.deltaX * wheelSensitivity,
         y: event.deltaY * wheelSensitivity,
@@ -661,7 +676,7 @@ export function useGesture(options: UseGestureOptions = {}): UseGestureReturn {
         y: offset.y - constrainedDelta.y,
       };
 
-      // Apply constraints
+      // Apply constraints with elastic (allows over-scroll)
       newOffset = applyConstraints(newOffset, constraints, elastic);
 
       setOffset(newOffset);
@@ -674,8 +689,33 @@ export function useGesture(options: UseGestureOptions = {}): UseGestureReturn {
       };
 
       onWheel?.(event, info);
+
+      // Set timeout to snap back to bounds when wheel stops
+      if (constraints && elastic > 0) {
+        s.wheelTimeout = setTimeout(() => {
+          s.wheelTimeout = null;
+          
+          // Check if we're over-scrolled and need to snap back
+          const constrained = {
+            x: clamp(
+              newOffset.x,
+              constraints.right ?? -Infinity,
+              constraints.left ?? Infinity
+            ),
+            y: clamp(
+              newOffset.y,
+              constraints.bottom ?? -Infinity,
+              constraints.top ?? Infinity
+            ),
+          };
+          
+          if (constrained.x !== newOffset.x || constrained.y !== newOffset.y) {
+            snapToTarget(constrained, newOffset);
+          }
+        }, 150);
+      }
     },
-    [wheel, wheelSensitivity, axis, offset, constraints, elastic, onWheel]
+    [wheel, wheelSensitivity, axis, offset, constraints, elastic, onWheel, snapToTarget]
   );
 
   // Global pointer event listeners
