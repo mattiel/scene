@@ -55,3 +55,14 @@ export type {
 
 // Utilities
 export { prefersReducedMotion, onReducedMotionChange } from './utils';
+
+// Snap point utilities
+export {
+  calculateSnapPoints,
+  calculateBounds,
+  findNearestSnap,
+  findSnapIndex,
+  type SnapPointOptions,
+  type BoundsOptions,
+  type Bounds,
+} from './utils';

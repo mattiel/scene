@@ -22,6 +22,24 @@ export {
   clamp,
 } from './utils';
 
+// Gesture hooks
+export {
+  useDismissGesture,
+  type DismissThresholds,
+  type DismissState,
+  type UseDismissGestureOptions,
+  type UseDismissGestureReturn,
+} from './useDismissGesture';
+
+export {
+  useRippleAnimations,
+  type RippleState,
+  type CollapseRippleState,
+  type RippleAnimations,
+  type UseRippleAnimationsOptions,
+  type UseRippleAnimationsReturn,
+} from './useRippleAnimations';
+
 // Canvas texture rendering
 export { CardTextureRenderer, type CardTextureCache } from './CardTextureRenderer';
 

@@ -15,3 +15,6 @@ export { EventBus, type EventCallback, type EventMap } from './EventBus';
 
 // Scheduler
 export { RAFScheduler, FramePriority, type FrameCallback } from './RAFScheduler';
+
+// Math Utilities
+export { lerp, clamp, inverseLerp, remap, smoothstep } from './math';

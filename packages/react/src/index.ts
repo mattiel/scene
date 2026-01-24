@@ -126,6 +126,29 @@ export {
   type UseRenderLoopReturn,
 } from './useRenderLoop';
 
+// Frame rate monitoring
+export { useFrameRate, type UseFrameRateOptions, type UseFrameRateReturn } from './useFrameRate';
+
+// Responsive breakpoints
+export {
+  useBreakpoint,
+  useCurrentBreakpoint,
+  useBreakpointUp,
+  type BreakpointConfig,
+} from './useBreakpoint';
+
+// Element sizing
+export {
+  useSize,
+  useResolution,
+  useWindowSize,
+  useMeasure,
+  type Size,
+  type UseSizeOptions,
+  type Resolution,
+  type UseResolutionOptions,
+} from './useSize';
+
 // Re-export useful types from dependencies
 export { InteractionMode } from '@scene/core';
 export type { Surface, SurfaceRect } from '@scene/surfaces';

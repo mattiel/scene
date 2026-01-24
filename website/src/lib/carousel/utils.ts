@@ -5,6 +5,9 @@
 import { useState, useEffect } from 'react';
 import { type CarouselConfig, BASE_CONFIG } from './data';
 
+// Re-export math utilities from @scene/core
+export { lerp, clamp } from '@scene/core';
+
 // ============================================
 // Position Calculations
 // ============================================
@@ -48,17 +51,6 @@ export function findCenterIndex(
   return closest;
 }
 
-// ============================================
-// Math Utilities
-// ============================================
-
-export function lerp(a: number, b: number, t: number): number {
-  return a + (b - a) * t;
-}
-
-export function clamp(v: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, v));
-}
 
 // ============================================
 // Responsive Configuration
