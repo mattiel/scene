@@ -9,7 +9,13 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
-  plugins: [tsConfigPaths(), tanstackStart(), viteReact(), basicSsl()],
+  plugins: [
+    tsConfigPaths(),
+    tanstackStart(),
+    viteReact(),
+    // Only use basicSsl for dev server, not for build
+    ...(process.env.NODE_ENV === 'development' ? [basicSsl()] : []),
+  ],
   server: {
     host: true, // Listen on all interfaces
     allowedHosts: ['.ts.net'], // Allow all Tailscale MagicDNS hosts
