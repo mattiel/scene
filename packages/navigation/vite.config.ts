@@ -6,6 +6,7 @@ export default defineConfig({
     dts({
       insertTypesEntry: true,
       rollupTypes: true,
+      skipDiagnostics: true,
     }),
   ],
   build: {

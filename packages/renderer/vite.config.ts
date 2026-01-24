@@ -8,6 +8,7 @@ export default defineConfig({
       insertTypesEntry: true,
       // Don't rollup types - api-extractor has issues with WebGPU global types
       rollupTypes: false,
+      skipDiagnostics: true,
     }),
   ],
   build: {

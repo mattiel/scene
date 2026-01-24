@@ -6,6 +6,7 @@ export default defineConfig({
     dts({
       insertTypesEntry: true,
       rollupTypes: false,
+      skipDiagnostics: true,
     }) as PluginOption,
   ],
   build: {
