@@ -400,11 +400,8 @@ function CarouselDemo() {
         // Ignore small deltas (trackpad inertia)
         if (deltaMagnitude < 3) return;
         
-        // Calculate velocity for flick detection
-        const velocity = deltaMagnitude / 16; // Approximate px/ms
-        
-        // handleWheel returns true if dismiss was triggered
-        dismiss.handleWheel(e.deltaX, e.deltaY, velocity);
+        // handleWheel tracks velocity internally
+        dismiss.handleWheel(e.deltaX, e.deltaY);
         return;
       }
       

@@ -44,6 +44,8 @@ export interface DismissState {
   lastWheelTime: number;
   /** Time of last dismiss (for post-dismiss momentum filtering) */
   postDismissTime: number;
+  /** Smoothed wheel velocity Y for flick detection */
+  wheelVelocityY: number;
 }
 
 export interface UseDismissGestureOptions {
@@ -67,8 +69,8 @@ export interface UseDismissGestureReturn {
   moveDrag: (x: number, y: number) => void;
   /** End drag and check threshold */
   endDrag: () => void;
-  /** Handle wheel input for dismiss */
-  handleWheel: (deltaX: number, deltaY: number, velocity?: number) => boolean;
+  /** Handle wheel input for dismiss (tracks velocity internally) */
+  handleWheel: (deltaX: number, deltaY: number) => boolean;
   /** Reset dismiss state (call after dismiss animation) */
   reset: () => void;
   /** Whether currently dragging */
@@ -145,6 +147,7 @@ export function useDismissGesture(
     wheelTimeout: null,
     lastWheelTime: 0,
     postDismissTime: 0,
+    wheelVelocityY: 0,
   });
 
   const triggerDismiss = useCallback(() => {
@@ -236,7 +239,7 @@ export function useDismissGesture(
   }, [cardWidth, cardHeight, thresholds, xDampening, triggerDismiss, offsetX, offsetY]);
 
   const handleWheel = useCallback(
-    (deltaX: number, deltaY: number, velocity?: number): boolean => {
+    (deltaX: number, deltaY: number): boolean => {
       const s = state.current;
       const now = performance.now();
 
@@ -254,6 +257,12 @@ export function useDismissGesture(
           return false;
         }
       }
+
+      // Calculate smoothed velocity (matches original behavior)
+      const timeDelta = s.lastWheelTime > 0 ? now - s.lastWheelTime : 16;
+      const velocityY = Math.abs(deltaY) / Math.max(timeDelta, 1);
+      // Smooth velocity with previous value for stable detection
+      s.wheelVelocityY = s.wheelVelocityY * 0.3 + velocityY * 0.7;
 
       s.lastWheelTime = now;
 
@@ -274,7 +283,8 @@ export function useDismissGesture(
       const thresholdX = cardWidth * thresholds.wheelXRatio;
       const absY = Math.abs(s.wheelAccY);
       const rawAbsX = Math.abs(s.wheelAccX / 0.3);
-      const totalMovement = Math.max(absY, rawAbsX);
+      // Use sum of both axes to determine minimum movement (matches original)
+      const totalMovement = absY + rawAbsX;
 
       const MIN_MOVEMENT = 30;
       if (totalMovement >= MIN_MOVEMENT) {
@@ -283,10 +293,13 @@ export function useDismissGesture(
           ? absY >= thresholdY
           : rawAbsX >= thresholdX;
 
-        // Check velocity for flick dismiss
-        const isFlick = velocity !== undefined && velocity >= thresholds.velocityThreshold;
+        // Check velocity for flick dismiss (only on Y axis, with minimum movement)
+        const isFlick = isYDominant && 
+          s.wheelVelocityY >= thresholds.velocityThreshold && 
+          absY > 30;
 
         if (isDismiss || isFlick) {
+          s.wheelVelocityY = 0;
           triggerDismiss();
           return true;
         }
@@ -296,6 +309,7 @@ export function useDismissGesture(
       s.wheelTimeout = setTimeout(() => {
         s.wheelAccX = 0;
         s.wheelAccY = 0;
+        s.wheelVelocityY = 0;
         s.wheelTimeout = null;
         offsetX.animateTo(0, springs.settle);
         offsetY.animateTo(0, springs.settle);
@@ -322,6 +336,7 @@ export function useDismissGesture(
     }
     s.lastWheelTime = 0;
     s.postDismissTime = 0;
+    s.wheelVelocityY = 0;
     offsetX.set(0);
     offsetY.set(0);
   }, [offsetX, offsetY]);
