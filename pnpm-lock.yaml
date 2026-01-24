@@ -160,6 +160,9 @@ importers:
       '@scene/renderer':
         specifier: workspace:*
         version: link:../renderer
+      '@scene/screen':
+        specifier: workspace:*
+        version: link:../screen
       '@scene/surfaces':
         specifier: workspace:*
         version: link:../surfaces
