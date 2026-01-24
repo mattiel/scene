@@ -253,6 +253,9 @@ export function useScrollableInput(options: UseScrollableInputOptions): UseScrol
 
 /**
  * Options for useScrollable hook
+ * 
+ * Note: Key properties from ScrollableConfig are duplicated here to ensure
+ * proper type resolution during declaration file generation.
  */
 export interface UseScrollableOptions extends ScrollableConfig {
   /** Whether the scrollable is enabled (default: true) */
@@ -265,6 +268,17 @@ export interface UseScrollableOptions extends ScrollableConfig {
   onSnapEnd?: (event: ScrollableEvents['snapEnd']) => void;
   /** Callback when bound is reached */
   onBoundReached?: (event: ScrollableEvents['boundReached']) => void;
+  // Duplicated from ScrollableConfig for declaration file generation
+  /** Initial offset (default: 0) */
+  initialOffset?: number;
+  /** Minimum offset bound */
+  minOffset?: number;
+  /** Maximum offset bound */
+  maxOffset?: number;
+  /** Snap points (positions to snap to) */
+  snapPoints?: number[];
+  /** Automatically snap to nearest point on release (default: false) */
+  autoSnap?: boolean;
 }
 
 /**
@@ -345,7 +359,7 @@ export function useScrollable<T extends HTMLElement = HTMLElement>(
     onSnapEnd,
     onBoundReached,
     ...scrollableConfig
-  } = options;
+  } = options as UseScrollableOptions & ScrollableConfig;
 
   // Create scrollable instance
   useEffect(() => {
@@ -360,7 +374,7 @@ export function useScrollable<T extends HTMLElement = HTMLElement>(
     // Subscribe to events
     const unsubs: (() => void)[] = [];
 
-    unsubs.push(scrollable.on('change', (event) => {
+    unsubs.push(scrollable.on('change', (event: { offset: number; velocity: number }) => {
       setState({
         offset: event.offset,
         velocity: event.velocity,
@@ -506,6 +520,9 @@ export function useScrollable<T extends HTMLElement = HTMLElement>(
 
 /**
  * Options for useDraggable hook
+ * 
+ * Note: Key properties from DraggableConfig are duplicated here to ensure
+ * proper type resolution during declaration file generation.
  */
 export interface UseDraggableOptions extends DraggableConfig {
   /** Whether the draggable is enabled (default: true) */
@@ -514,6 +531,11 @@ export interface UseDraggableOptions extends DraggableConfig {
   onChange?: (event: DraggableEvents['change']) => void;
   /** Callback when bound is reached */
   onBoundReached?: (event: DraggableEvents['boundReached']) => void;
+  // Duplicated from DraggableConfig for declaration file generation
+  /** Initial position (default: { x: 0, y: 0 }) */
+  initialPosition?: { x: number; y: number };
+  /** Bounds for constraining drag */
+  bounds?: { minX?: number; maxX?: number; minY?: number; maxY?: number };
 }
 
 /**
@@ -596,7 +618,7 @@ export function useDraggable<T extends HTMLElement = HTMLElement>(
     onChange,
     onBoundReached,
     ...draggableConfig
-  } = options;
+  } = options as UseDraggableOptions & DraggableConfig;
 
   // Create draggable instance
   useEffect(() => {
@@ -611,7 +633,7 @@ export function useDraggable<T extends HTMLElement = HTMLElement>(
     // Subscribe to events
     const unsubs: (() => void)[] = [];
 
-    unsubs.push(draggable.on('change', (event) => {
+    unsubs.push(draggable.on('change', (event: { position: { x: number; y: number }; velocity: { x: number; y: number } }) => {
       setState({
         position: event.position,
         velocity: event.velocity,

@@ -195,7 +195,7 @@ export function SceneProvider({
     });
 
     // Listen for mode changes
-    const unsubMode = engine.on('mode:changed', ({ to }) => {
+    const unsubMode = engine.on('mode:changed', ({ to }: { to: InteractionMode }) => {
       setCurrentMode(to as InteractionMode);
       onModeChange?.(to as InteractionMode);
     });

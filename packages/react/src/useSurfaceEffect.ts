@@ -222,7 +222,7 @@ export function useSurfaceEffect(
   const setParam = useCallback((name: string, value: number | number[]) => {
     if (effectRef.current) {
       const uniforms = effectRef.current.getUniforms();
-      const uniform = uniforms.find(u => u.name === name);
+      const uniform = uniforms.find((u: EffectUniform) => u.name === name);
       if (uniform) {
         uniform.value = value as typeof uniform.value;
       }

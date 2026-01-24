@@ -73,7 +73,7 @@ export function useMotion(
 
   // Subscribe to value changes
   useEffect(() => {
-    const unsubscribe = sceneValue.on('change', (newValue) => {
+    const unsubscribe = sceneValue.on('change', (newValue: number) => {
       setValue(newValue);
     });
 
@@ -212,7 +212,7 @@ export function useMotion2D(
   const [isAnimating, setIsAnimating] = useState(false);
 
   useEffect(() => {
-    const unsubscribe = sceneValue.on('change', (newX, newY) => {
+    const unsubscribe = sceneValue.on('change', (newX: number, newY: number) => {
       setX(newX);
       setY(newY);
     });

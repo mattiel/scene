@@ -307,7 +307,7 @@ export function useGPU(
         canvas,
         powerPreference,
         alphaMode,
-        onProgress: (p) => {
+        onProgress: (p: { percent: number; message: string; step: string }) => {
           setProgress({
             percent: p.percent,
             message: p.message,
