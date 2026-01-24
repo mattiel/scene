@@ -126,6 +126,21 @@ export {
   type UseRenderLoopReturn,
 } from './useRenderLoop';
 
+// Gesture handling
+export {
+  useGesture,
+  type Point,
+  type GestureInfo,
+  type GestureConstraints,
+  type Axis,
+  type UseGestureOptions,
+  type GestureControls,
+  type UseGestureReturn,
+  type GestureBindings,
+} from './useGesture';
+
+export { useGestureControls } from './useGestureControls';
+
 // Frame rate monitoring
 export { useFrameRate, type UseFrameRateOptions, type UseFrameRateReturn } from './useFrameRate';
 
