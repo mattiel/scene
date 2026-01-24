@@ -155,6 +155,10 @@ export function useDismissGesture(
     s.postDismissTime = performance.now();
     s.isDragging = false;
     s.lockedAxis = null;
+    // Reset wheel accumulators to prevent carry-over to next expand
+    s.wheelAccX = 0;
+    s.wheelAccY = 0;
+    s.wheelVelocityY = 0;
     if (s.wheelTimeout) {
       clearTimeout(s.wheelTimeout);
       s.wheelTimeout = null;
