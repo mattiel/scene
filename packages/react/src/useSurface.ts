@@ -100,12 +100,12 @@ export function useSurface<T extends HTMLElement = HTMLElement>(
     isVisibleRef.current = surface.isVisible;
 
     // Subscribe to changes
-    const unsubLayout = surface.onLayoutChange((rect) => {
+    const unsubLayout = surface.onLayoutChange((rect: SurfaceRect) => {
       rectRef.current = rect;
       onLayoutChange?.(rect);
     });
 
-    const unsubVisibility = surface.onVisibilityChange((visible) => {
+    const unsubVisibility = surface.onVisibilityChange((visible: boolean) => {
       isVisibleRef.current = visible;
       onVisibilityChange?.(visible);
     });

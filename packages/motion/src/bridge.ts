@@ -44,7 +44,7 @@ export class FrameBridge {
     this.scheduler = scheduler;
     
     // Register with Scene's scheduler at the specified priority
-    const frameCallback: FrameCallback = (_deltaTime, timestamp) => {
+    const frameCallback: FrameCallback = (_deltaTime: number, timestamp: number) => {
       // Drive Motion animations by calling registered callbacks
       const frameData: FrameData = {
         timestamp,
