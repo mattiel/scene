@@ -59,6 +59,8 @@ export interface ScrollableConfig {
   friction?: number;
   /** Minimum velocity to maintain inertia (default: 0.15) */
   minVelocity?: number;
+  /** Velocity multiplier for inertia (default: 1, use < 1 to reduce acceleration) */
+  velocityMultiplier?: number;
   /** Reduced motion mode - faster animations, less inertia */
   reducedMotion?: boolean;
   /** Optional SceneValue to bind offset to */
@@ -93,6 +95,7 @@ interface ResolvedConfig {
   dragDecayDuration: number;
   friction: number;
   minVelocity: number;
+  velocityMultiplier: number;
   reducedMotion: boolean;
   sceneValue: SceneValue | undefined;
   useSpringSnap: boolean;
@@ -116,6 +119,7 @@ const DEFAULT_CONFIG: ResolvedConfig = {
   dragDecayDuration: 1000,
   friction: 0.92,
   minVelocity: 0.15,
+  velocityMultiplier: 1,
   reducedMotion: false,
   sceneValue: undefined,
   useSpringSnap: false,
@@ -542,17 +546,17 @@ export class Scrollable {
     
     let shouldContinue = false;
     
-    // Handle snap animation
+    // Handle snap animation (highest priority)
     if (this.isSnapping) {
       shouldContinue = this.updateSnapAnimation(now);
+    }
+    // Handle drag inertia (check before wheel decay to prevent hijacking)
+    else if (this.dragInertiaActive) {
+      shouldContinue = this.updateDragInertia(now);
     }
     // Handle wheel decay
     else if (this.handleWheelDecay(now, dt)) {
       shouldContinue = true;
-    }
-    // Handle drag inertia
-    else if (this.dragInertiaActive) {
-      shouldContinue = this.updateDragInertia(now);
     }
     
     if (shouldContinue) {
@@ -603,15 +607,24 @@ export class Scrollable {
 
   private startDragInertia(velocity: number): void {
     this.dragInertiaActive = true;
-    this.dragDecayStartTime = performance.now();
-    this.dragInitialVelocity = velocity;
+    // Set start time to 0 initially - will be set on first animation frame
+    // This prevents jumps if there's a delay before RAF fires
+    this.dragDecayStartTime = 0;
+    // Apply velocity multiplier to control acceleration
+    const scaledVelocity = velocity * this.config.velocityMultiplier;
+    this.dragInitialVelocity = scaledVelocity;
     this.dragStartOffset = this._offset;
-    this._velocity = velocity;
+    this._velocity = scaledVelocity;
     
     this.startAnimation();
   }
 
   private updateDragInertia(now: number): boolean {
+    // Set start time on first frame to avoid jumps from RAF delay
+    if (this.dragDecayStartTime === 0) {
+      this.dragDecayStartTime = now;
+    }
+    
     const duration = this.config.dragDecayDuration;
     const elapsed = now - this.dragDecayStartTime;
     const t = Math.min(elapsed / duration, 1);

@@ -73,9 +73,16 @@ function calculateConfig(): CarouselConfig {
   // Mobile: < 640px
   if (width < 640) {
     const cardWidth = Math.min(width - 48, 260); // 24px padding each side
-    const cardHeight = Math.min(height * 0.5, cardWidth * 1.4);
-    const maxExpandScale = (width - 32) / cardWidth; // Leave 16px margin each side
-    const expandScale = Math.min(0.35, maxExpandScale - 1);
+    const cardHeight = Math.min(height * 0.4, cardWidth * 1.4); // Reduced from 0.5 to 0.4
+    
+    // Calculate max scale that fits BOTH dimensions (height is often the constraint on mobile)
+    const marginX = 40; // 20px each side
+    const marginY = 160; // Account for browser chrome, notch, header/footer UI
+    const maxScaleByWidth = (width - marginX) / cardWidth;
+    const maxScaleByHeight = (height - marginY) / cardHeight;
+    const maxExpandScale = Math.min(maxScaleByWidth, maxScaleByHeight);
+    // Let viewport calculation drive the scale - only floor it, don't cap it high
+    const expandScale = Math.max(0.1, maxExpandScale - 1);
 
     return {
       cardSpacing: cardWidth + 20,
@@ -93,8 +100,14 @@ function calculateConfig(): CarouselConfig {
   if (width < 1024) {
     const cardWidth = Math.min(280, width * 0.35);
     const cardHeight = cardWidth * 1.4;
-    const maxExpandScale = (width - 48) / cardWidth;
-    const expandScale = Math.min(0.5, maxExpandScale - 1);
+    
+    // Calculate max scale that fits BOTH dimensions
+    const marginX = 48; // 24px each side
+    const marginY = 100; // Account for UI elements
+    const maxScaleByWidth = (width - marginX) / cardWidth;
+    const maxScaleByHeight = (height - marginY) / cardHeight;
+    const maxExpandScale = Math.min(maxScaleByWidth, maxScaleByHeight);
+    const expandScale = Math.max(0.2, Math.min(0.5, maxExpandScale - 1));
 
     return {
       cardSpacing: cardWidth + 30,
@@ -109,7 +122,25 @@ function calculateConfig(): CarouselConfig {
   }
 
   // Desktop: > 1024px
-  return BASE_CONFIG;
+  // Still need to calculate expandScale based on viewport to prevent overflow
+  const cardWidth = BASE_CONFIG.cardWidth;
+  const cardHeight = BASE_CONFIG.cardHeight;
+  
+  // Calculate max scale that fits in viewport (with margin)
+  const marginX = 80; // 40px each side
+  const marginY = 120; // Account for header/footer UI
+  const maxScaleByWidth = (width - marginX) / cardWidth;
+  const maxScaleByHeight = (height - marginY) / cardHeight;
+  const maxExpandScale = Math.min(maxScaleByWidth, maxScaleByHeight);
+  
+  // expandScale is the additional scale on top of 1.0
+  // Clamp to BASE_CONFIG.expandScale as upper bound
+  const expandScale = Math.min(BASE_CONFIG.expandScale, maxExpandScale - 1);
+
+  return {
+    ...BASE_CONFIG,
+    expandScale: Math.max(0.2, expandScale), // Ensure at least some expansion
+  };
 }
 
 /** Hook that returns responsive carousel configuration */
@@ -117,7 +148,7 @@ export function useResponsiveConfig(): CarouselConfig {
   const [config, setConfig] = useState(() => calculateConfig());
 
   useEffect(() => {
-    const handleResize = () => {
+    const handleResize = ():void => {
       setConfig(calculateConfig());
     };
 

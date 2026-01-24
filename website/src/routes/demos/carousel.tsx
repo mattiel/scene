@@ -3,8 +3,9 @@
  *
  * Demonstrates how to build a 3D carousel using @scene primitives:
  * - FabricWaveRenderer for GPU rendering with fabric wave effects
- * - useScrollable + useScrollableInput for scroll/drag interaction
+ * - Scrollable controller for scroll/drag interaction
  * - useMotion for spring animations
+ * - Drag-to-dismiss gesture with threshold for expanded cards
  */
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
@@ -18,7 +19,6 @@ import {
   useMotion,
   useGPU,
   useRenderLoop,
-  useScrollableInput,
   springs,
 } from '@scene/react';
 import { Scrollable } from '@scene/controllers';
@@ -79,7 +79,32 @@ interface AnimationState {
   lastTextureThreshold: Map<string, number>;
   /** Track last canvas dimensions to avoid redundant resizes */
   lastCanvasDims: { width: number; height: number };
+  /** Dismiss gesture state */
+  dismissDragX: number;
+  dismissDragY: number;
+  isDismissDragging: boolean;
+  dismissStartX: number;
+  dismissStartY: number;
+  /** Locked axis for dismiss gesture (null = not locked yet, 'x' or 'y') */
+  dismissLockedAxis: 'x' | 'y' | null;
+  /** Wheel dismiss timeout */
+  wheelAccumulatorTimeout: number | null;
+  /** Wheel velocity tracking */
+  wheelLastTime: number;
+  wheelVelocityY: number;
+  /** Post-dismiss: track last wheel event time to detect new gesture */
+  postDismissLastWheelTime: number;
+  /** Post-drag: ignore wheel momentum after pointer drag */
+  postDragEndTime: number;
 }
+
+// Dismiss gesture thresholds (as percentage of card dimensions)
+const DISMISS_THRESHOLD_Y_RATIO = 0.5; // 25% of card height to dismiss vertically
+const DISMISS_THRESHOLD_X_RATIO = 1.25; // 100% of card width to dismiss horizontally
+const WHEEL_DISMISS_THRESHOLD_Y_RATIO = 0.4; // 40% of card height for wheel dismiss
+const WHEEL_DISMISS_THRESHOLD_X_RATIO = 1.2; // 120% of card width for wheel dismiss
+const WHEEL_VELOCITY_THRESHOLD = 15; // Velocity threshold for flick dismiss (pixels/ms)
+const WHEEL_ACCUMULATOR_TIMEOUT = 100; // ms before wheel accumulator resets
 
 function createInitialAnimState(): AnimationState {
   return {
@@ -97,6 +122,17 @@ function createInitialAnimState(): AnimationState {
     currentVisualOffset: 0,
     lastTextureThreshold: new Map(),
     lastCanvasDims: { width: 0, height: 0 },
+    dismissDragX: 0,
+    dismissDragY: 0,
+    isDismissDragging: false,
+    dismissStartX: 0,
+    dismissStartY: 0,
+    dismissLockedAxis: null,
+    wheelAccumulatorTimeout: null,
+    wheelLastTime: 0,
+    wheelVelocityY: 0,
+    postDismissLastWheelTime: 0,
+    postDragEndTime: 0,
   };
 }
 
@@ -139,6 +175,8 @@ function CarouselDemo() {
   const bendMotion = useMotion(0);
   const expandMotion = useMotion(0);
   const introMotion = useMotion(0);
+  const dismissOffsetX = useMotion(0);
+  const dismissOffsetY = useMotion(0);
 
   // GPU initialization
   const gpu = useGPU(canvasRef, {
@@ -185,17 +223,19 @@ function CarouselDemo() {
       snapPoints,
       minOffset: bounds.min,
       maxOffset: bounds.max,
-      autoSnap: true,
-      snapThreshold: config.cardWidth * 8 - config.cardSpacing,
+      autoSnap: false,
+      snapThreshold: .1,
       useSpringSnap: true,
-      snapSpring: springs.fluid,
-      wheelSensitivity: 0.15,
+      snapSpring: springs.settle,
+      wheelSensitivity: .68,
       dragSensitivity: 1,
       dragDecayDuration: 2000,
-      friction: prefersReducedMotion ? 0.75 : 0.92,
+      friction: prefersReducedMotion ? 0.75 : 0.85,
+      minVelocity: 0.05,
+      velocityMultiplier: 0.2, // Reduce inertia acceleration
       direction: 'horizontal',
       rubberband: true,
-      rubberbandFactor: 0.55,
+      rubberbandFactor: 1,
       rubberbandDimension: config.cardWidth,
     });
 
@@ -340,7 +380,7 @@ function CarouselDemo() {
         if (index >= 0) {
           setExpandedIndex(index);
           animStateRef.current.lastExpandedIndex = index;
-          expandMotion.animateTo(1, springs.smooth);
+          expandMotion.animateTo(1, springs.settle);
         }
       }
     });
@@ -352,6 +392,35 @@ function CarouselDemo() {
     };
   }, [engine, registry, config]);
 
+  // Helper to dismiss expanded card
+  const dismissExpandedCard = useCallback(() => {
+    if (expandedIndex < 0) return;
+    
+    const anim = animStateRef.current;
+    const collapsingCard = CARD_DATA[expandedIndex];
+    anim.collapseRipples.set(collapsingCard.id, { progress: 0.001 });
+    
+    // Reset dismiss state
+    anim.dismissDragX = 0;
+    anim.dismissDragY = 0;
+    anim.isDismissDragging = false;
+    anim.dismissLockedAxis = null;    if (anim.wheelAccumulatorTimeout) {
+      clearTimeout(anim.wheelAccumulatorTimeout);
+      anim.wheelAccumulatorTimeout = null;
+    }
+    // Reset velocity tracking
+    anim.wheelLastTime = 0;
+    anim.wheelVelocityY = 0;
+    // Mark dismiss time to detect momentum vs new gesture
+    anim.postDismissLastWheelTime = performance.now();
+    // Animate dismiss offset back to center (slightly faster than collapse for smooth return)
+    dismissOffsetX.animateTo(0, springs.settle);
+    dismissOffsetY.animateTo(0, springs.settle);
+    
+    setExpandedIndex(-1);
+    expandMotion.animateTo(0, springs.settle);
+  }, [expandedIndex]);
+
   // Keyboard and wheel handlers
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -359,23 +428,123 @@ function CarouselDemo() {
 
     const handleKeydown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && expandedIndex >= 0) {
-        const collapsingCard = CARD_DATA[expandedIndex];
-        animStateRef.current.collapseRipples.set(collapsingCard.id, { progress: 0.001 });
-        setExpandedIndex(-1);
-        expandMotion.animateTo(0, springs.snappy);
+        dismissExpandedCard();
       }
     };
 
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault();
+      
       if (expandedIndex >= 0) {
-        const collapsingCard = CARD_DATA[expandedIndex];
-        animStateRef.current.collapseRipples.set(collapsingCard.id, { progress: 0.001 });
-        setExpandedIndex(-1);
-        expandMotion.animateTo(0, springs.snappy);
+        const anim = animStateRef.current;
+        const deltaX = e.deltaX;
+        const deltaY = e.deltaY;
+        const deltaMagnitude = Math.sqrt(deltaX ** 2 + deltaY ** 2);
+        const now = performance.now();
+        
+        // Ignore small deltas (trackpad inertia) - only respond to active swipes
+        const MIN_ACTIVE_DELTA = 3;
+        if (deltaMagnitude < MIN_ACTIVE_DELTA) {
+          return;
+        }
+        
+        // Clear previous timeout
+        if (anim.wheelAccumulatorTimeout) {
+          clearTimeout(anim.wheelAccumulatorTimeout);
+        }
+        
+        // Calculate vertical velocity (pixels per ms)
+        const timeDelta = anim.wheelLastTime > 0 ? now - anim.wheelLastTime : 16;
+        const velocityY = Math.abs(deltaY) / Math.max(timeDelta, 1);
+        
+        // Smooth velocity with previous value for more stable detection
+        anim.wheelVelocityY = anim.wheelVelocityY * 0.3 + velocityY * 0.7;
+        anim.wheelLastTime = now;
+        
+        // Accumulate wheel delta for visual feedback (both directions)
+        // Negate to make card follow swipe direction
+        // X is dampened (0.3x) to feel more constrained
+        anim.dismissDragX -= deltaX * 0.3;
+        anim.dismissDragY -= deltaY;
+        
+        // Update visual feedback - card follows swipe in all directions
+        dismissOffsetX.set(anim.dismissDragX);
+        dismissOffsetY.set(anim.dismissDragY);
+        
+        // Check dismissal conditions based on DOMINANT axis only
+        // This prevents accidental dismissal when swiping horizontally with slight vertical movement
+        const wheelDismissThresholdY = config.cardHeight * WHEEL_DISMISS_THRESHOLD_Y_RATIO;
+        const wheelDismissThresholdX = config.cardWidth * WHEEL_DISMISS_THRESHOLD_X_RATIO;
+        const absY = Math.abs(anim.dismissDragY);
+        // For X, undo the 0.3 damping for threshold check
+        const rawAbsX = Math.abs(anim.dismissDragX / 0.3);
+        
+        // Compare raw values to determine dominant axis (both Y and X as raw movement)
+        // Require minimum 30px movement before checking dismissal to avoid premature triggers
+        const totalMovement = absY + rawAbsX;
+        const MIN_MOVEMENT_FOR_DISMISS = 30;
+        
+        // Only check dismissal after minimum movement to determine true dominant axis
+        if (totalMovement >= MIN_MOVEMENT_FOR_DISMISS) {
+          const isVerticalDominant = absY > rawAbsX;
+          const isDistanceThresholdMet = isVerticalDominant 
+            ? absY >= wheelDismissThresholdY 
+            : rawAbsX >= wheelDismissThresholdX;
+          const isVelocityThresholdMet = isVerticalDominant && anim.wheelVelocityY >= WHEEL_VELOCITY_THRESHOLD && absY > 30;
+          
+          if (isDistanceThresholdMet || isVelocityThresholdMet) {
+            dismissExpandedCard();
+            anim.wheelLastTime = 0;
+            anim.wheelVelocityY = 0;
+            return;
+          }
+        }
+        
+        // Set timeout to reset accumulator and spring back (shorter timeout for snappier feel)
+        anim.wheelAccumulatorTimeout = window.setTimeout(() => {
+          anim.dismissDragX = 0;
+          anim.dismissDragY = 0;
+          anim.wheelAccumulatorTimeout = null;
+          anim.wheelLastTime = 0;
+          anim.wheelVelocityY = 0;
+          dismissOffsetX.animateTo(0, springs.settle);
+          dismissOffsetY.animateTo(0, springs.settle);
+        }, WHEEL_ACCUMULATOR_TIMEOUT);
+        
         return;
       }
-      scrollableRef.current?.handleWheel(e.deltaY);
+      
+      // When not expanded, scroll carousel (support both deltaX and deltaY for trackpad)
+      const anim = animStateRef.current;
+      const now = performance.now();
+      
+      // After pointer drag, ignore wheel momentum for 400ms
+      // This prevents trackpad momentum from interfering with drag inertia
+      const POST_DRAG_IGNORE_DURATION = 400;
+      if (anim.postDragEndTime > 0 && now - anim.postDragEndTime < POST_DRAG_IGNORE_DURATION) {
+        return;
+      }
+      
+      // After dismiss, ignore momentum but allow new gestures
+      // New gesture = gap > 80ms since last wheel event (momentum has no gaps)
+      const GAP_THRESHOLD = 80;
+      const timeSinceLastWheel = now - anim.postDismissLastWheelTime;
+      
+      if (anim.postDismissLastWheelTime > 0) {
+        if (timeSinceLastWheel < GAP_THRESHOLD) {
+          // Continuous events = momentum, ignore but track time
+          anim.postDismissLastWheelTime = now;
+          return;
+        } else {
+          // Gap detected = new gesture, clear post-dismiss state
+          anim.postDismissLastWheelTime = 0;
+        }
+      }
+      
+      // Use whichever axis has larger movement
+      // Negate deltaY so scroll down = swipe left (matches natural scrolling feel)
+      const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : -e.deltaY;
+      scrollableRef.current?.handleWheel(delta);
     };
 
     canvas.addEventListener('wheel', handleWheel, { passive: false });
@@ -385,7 +554,7 @@ function CarouselDemo() {
       canvas.removeEventListener('wheel', handleWheel);
       window.removeEventListener('keydown', handleKeydown);
     };
-  }, [expandedIndex]);
+  }, [expandedIndex, dismissExpandedCard, config]);
 
   // Tap handler
   const handleTap = useCallback(
@@ -492,10 +661,10 @@ function CarouselDemo() {
         });
 
         if (expandedIndex === closestIndex) {
+          // Tapping the expanded card dismisses it (ripple already set above)
           const collapsingCard = CARD_DATA[closestIndex];
           anim.collapseRipples.set(collapsingCard.id, { progress: 0.001 });
-          setExpandedIndex(-1);
-          expandMotion.animateTo(0, springs.smooth);
+          dismissExpandedCard();
         } else {
           if (expandedIndex >= 0) {
             anim.pendingTextureReset = expandedIndex;
@@ -504,17 +673,20 @@ function CarouselDemo() {
           scrollable.snapTo(snapPoints[closestIndex]);
           setExpandedIndex(closestIndex);
           anim.lastExpandedIndex = closestIndex;
-          expandMotion.animateTo(1, springs.smooth);
+          expandMotion.animateTo(1, springs.settle);
         }
       }
     },
-    [expandedIndex, config]
+    [expandedIndex, config, dismissExpandedCard]
   );
 
   // Drag start handler
-  const handleDragStart = useCallback(() => {
+  const handleDragStart = useCallback((startX: number, startY: number) => {
     const anim = animStateRef.current;
     const isIntroing = introMotion.value < 0.99;
+    
+    // Clear post-drag ignore state since user is starting a new drag
+    anim.postDragEndTime = 0;
 
     if (isIntroing) {
       scrollableRef.current?.setOffset(anim.currentVisualOffset, false);
@@ -523,21 +695,184 @@ function CarouselDemo() {
     }
 
     if (expandedIndex >= 0) {
-      const collapsingCard = CARD_DATA[expandedIndex];
-      anim.collapseRipples.set(collapsingCard.id, { progress: 0.001 });
-      setExpandedIndex(-1);
-      expandMotion.animateTo(0, springs.smooth);
+      // Start dismiss gesture tracking
+      anim.isDismissDragging = true;
+      anim.dismissStartX = startX;
+      anim.dismissStartY = startY;
+      anim.dismissDragX = 0;
+      anim.dismissDragY = 0;
+      anim.dismissLockedAxis = null; // Reset axis lock
+      return; // Don't start carousel scroll
     }
     scrollableRef.current?.handleDragStart();
   }, [expandedIndex]);
 
-  // Pointer events
-  const { isDragging: _isDragging, ...pointerEvents } = useScrollableInput({
-    scrollable: scrollableRef.current,
-    direction: 'horizontal',
-    onTap: handleTap,
-    onDragStart: handleDragStart,
+  // Drag move handler for dismiss gesture
+  const handleDragMove = useCallback((currentX: number, currentY: number) => {
+    const anim = animStateRef.current;
+    
+    if (anim.isDismissDragging && expandedIndex >= 0) {
+      // Calculate raw delta from start
+      const rawDeltaX = currentX - anim.dismissStartX;
+      const rawDeltaY = currentY - anim.dismissStartY;
+      
+      // Lock axis after 15px of movement in either direction
+      const AXIS_LOCK_THRESHOLD = 15;
+      if (!anim.dismissLockedAxis) {
+        const absX = Math.abs(rawDeltaX);
+        const absY = Math.abs(rawDeltaY);
+        if (absX > AXIS_LOCK_THRESHOLD || absY > AXIS_LOCK_THRESHOLD) {
+          anim.dismissLockedAxis = absX > absY ? 'x' : 'y';
+        }
+      }
+      
+      // Apply dampening and update based on locked axis
+      // X is dampened (0.7x) to feel more constrained
+      // Y follows finger 1:1 since vertical is the primary dismiss direction
+      const deltaX = rawDeltaX * 0.7;
+      const deltaY = rawDeltaY;
+      
+      // Update both for visual feedback, but locked axis determines dismiss
+      anim.dismissDragX = deltaX;
+      anim.dismissDragY = deltaY;
+      dismissOffsetX.set(deltaX);
+      dismissOffsetY.set(deltaY);
+    }
+  }, [expandedIndex]);
+
+  // Drag end handler for dismiss gesture
+  const handleDragEnd = useCallback(() => {
+    const anim = animStateRef.current;
+    
+    if (anim.isDismissDragging && expandedIndex >= 0) {
+      anim.isDismissDragging = false;
+      
+      const absY = Math.abs(anim.dismissDragY);
+      // For X, use raw delta (not dampened) for threshold check
+      const rawDeltaX = anim.dismissDragX / 0.7; // Undo the 0.7 damping
+      const absX = Math.abs(rawDeltaX);
+      const dismissThresholdY = config.cardHeight * DISMISS_THRESHOLD_Y_RATIO;
+      const dismissThresholdX = config.cardWidth * DISMISS_THRESHOLD_X_RATIO;
+      
+      // Use locked axis to determine which threshold to check
+      // This prevents axis confusion from gesture drift
+      const lockedAxis = anim.dismissLockedAxis;
+      let isDismissThresholdMet = false;
+      
+      if (lockedAxis === 'y') {
+        isDismissThresholdMet = absY >= dismissThresholdY;
+      } else if (lockedAxis === 'x') {
+        isDismissThresholdMet = absX >= dismissThresholdX;
+      }
+      // If no axis was locked (very small movement), don't dismiss
+      
+      if (isDismissThresholdMet) {
+        dismissExpandedCard();
+        return;
+      }
+      
+      // Threshold not met - spring back to center in both directions
+      anim.dismissDragX = 0;
+      anim.dismissDragY = 0;
+      dismissOffsetX.animateTo(0, springs.settle);
+      dismissOffsetY.animateTo(0, springs.settle);
+    }
+  }, [expandedIndex, dismissExpandedCard, config]);
+
+  // Custom pointer event handling with dismiss gesture support
+  const pointerStateRef = useRef({
+    isDown: false,
+    startX: 0,
+    startY: 0,
+    lastX: 0,
+    lastY: 0,
+    totalMovement: 0,
+    isDragging: false,
+    startTime: 0,
   });
+
+  const onPointerDown = useCallback((e: React.PointerEvent) => {
+    const state = pointerStateRef.current;
+    state.isDown = true;
+    state.startX = e.clientX;
+    state.startY = e.clientY;
+    state.lastX = e.clientX;
+    state.lastY = e.clientY;
+    state.totalMovement = 0;
+    state.isDragging = false;
+    state.startTime = performance.now();
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  }, []);
+
+  const onPointerMove = useCallback((e: React.PointerEvent) => {
+    const state = pointerStateRef.current;
+    if (!state.isDown) return;
+    
+    const dx = e.clientX - state.lastX;
+    const dy = e.clientY - state.lastY;
+    const delta = Math.abs(dx); // Horizontal for scroll
+    
+    state.totalMovement += Math.sqrt(dx * dx + dy * dy);
+    
+    // Start drag if moved beyond threshold
+    if (!state.isDragging && state.totalMovement > 8) {
+      state.isDragging = true;
+      handleDragStart(state.startX, state.startY);
+    }
+    
+    if (state.isDragging) {
+      const anim = animStateRef.current;
+      
+      if (anim.isDismissDragging) {
+        // Handle dismiss gesture
+        handleDragMove(e.clientX, e.clientY);
+      } else {
+        // Handle normal carousel scroll
+        scrollableRef.current?.handleDrag(dx);
+      }
+    }
+    
+    state.lastX = e.clientX;
+    state.lastY = e.clientY;
+  }, [handleDragStart, handleDragMove]);
+
+  const onPointerUp = useCallback((e: React.PointerEvent) => {
+    const state = pointerStateRef.current;
+    if (!state.isDown) return;
+    state.isDown = false;
+    
+    const duration = performance.now() - state.startTime;
+    
+    try {
+      (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch {
+      // Ignore
+    }
+    
+    // Check if this was a tap
+    if (duration < 300 && state.totalMovement < 8) {
+      handleTap(e.clientX, e.clientY);
+    } else if (state.isDragging) {
+      const anim = animStateRef.current;
+      
+      if (anim.isDismissDragging) {
+        handleDragEnd();
+      } else {
+        scrollableRef.current?.handleDragEnd();
+        // Mark time to ignore trackpad momentum wheel events
+        anim.postDragEndTime = performance.now();
+      }
+    }
+    
+    state.isDragging = false;
+  }, [handleTap, handleDragEnd]);
+
+  const pointerEvents = useMemo(() => ({
+    onPointerDown,
+    onPointerMove,
+    onPointerUp,
+    onPointerLeave: onPointerUp,
+  }), [onPointerDown, onPointerMove, onPointerUp]);
 
   // Status items
   const statusItems = useMemo(
@@ -662,6 +997,10 @@ function CarouselDemo() {
         anim.pendingTextureReset = -1;
       }
 
+      // Get dismiss offset values for visual feedback
+      const currentDismissX = dismissOffsetX.value;
+      const currentDismissY = dismissOffsetY.value;
+
       // Compute card states
       const midIndex = (CARD_DATA.length - 1) / 2;
       const cardStates: FabricCardState[] = CARD_DATA.map((card, index) => {
@@ -671,6 +1010,7 @@ function CarouselDemo() {
         const collapseRipple = anim.collapseRipples.get(card.id);
 
         let finalX = x;
+        let finalY = 0;
         let finalZ = 0;
         let opacity = 1;
         let scale = 1;
@@ -687,8 +1027,16 @@ function CarouselDemo() {
         if (expandProgress > 0) {
           if (isActiveCard) {
             scale = 1 + expandProgress * config.expandScale;
-            finalZ = expandProgress * 300;
+            // Z depth proportional to cameraZ for consistent perspective effect across devices
+            // 0.15 factor gives ~1.18x perspective boost (cameraZ / (cameraZ - 0.15*cameraZ) = 1/0.85)
+            finalZ = expandProgress * config.cameraZ * 0.15;
             finalX = lerp(x, 0, expandProgress);
+            
+            // Apply dismiss offset to expanded card for visual feedback
+            // Note: Y is negated because screen Y (down positive) is opposite to 3D Y (up positive)
+            // Apply during both expansion AND collapse so dismiss gesture animates smoothly
+            finalX += currentDismissX;
+            finalY = -currentDismissY;
           } else {
             opacity = 1 - expandProgress * 0.85;
             finalZ = -expandProgress * 100;
@@ -700,8 +1048,9 @@ function CarouselDemo() {
         if (el && gpu.isFallback) {
           const perspective = config.cameraZ / (config.cameraZ - finalZ);
           const projectedX = finalX * perspective;
+          const projectedY = finalY * perspective;
           const totalScale = perspective * scale;
-          el.style.transform = `translate(-50%, -50%) translate(${projectedX}px, 0px) scale(${totalScale})`;
+          el.style.transform = `translate(-50%, -50%) translate(${projectedX}px, ${projectedY}px) scale(${totalScale})`;
           el.style.zIndex = String(Math.round(finalZ));
           el.style.opacity = String(opacity);
         }
@@ -739,7 +1088,7 @@ function CarouselDemo() {
         return {
           id: card.id,
           x: finalX,
-          y: 0,
+          y: finalY,
           z: finalZ,
           rotationY: -currentBend * 0.08 * (1 - expandProgress),
           width: config.cardWidth * scale,
