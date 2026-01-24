@@ -79,6 +79,8 @@ interface AnimationState {
   lastCanvasDims: { width: number; height: number };
   /** Post-drag: ignore wheel momentum after pointer drag */
   postDragEndTime: number;
+  /** Post-dismiss: ignore wheel momentum after wheel-based dismiss */
+  postWheelDismissTime: number;
 }
 
 function createInitialAnimState(): AnimationState {
@@ -94,6 +96,7 @@ function createInitialAnimState(): AnimationState {
     lastTextureThreshold: new Map(),
     lastCanvasDims: { width: 0, height: 0 },
     postDragEndTime: 0,
+    postWheelDismissTime: 0,
   };
 }
 
@@ -364,6 +367,11 @@ function CarouselDemo() {
       if (expandedIndex < 0) return;
       const collapsingCard = CARD_DATA[expandedIndex];
       ripples.addCollapseRipple(collapsingCard.id);
+      // Clear any carousel momentum immediately to prevent scroll after dismiss
+      scrollableRef.current?.stop();
+      // Track dismiss time separately from dismiss hook's internal state
+      // This ensures wheel momentum is filtered even if dismiss hook clears its postDismissTime
+      animStateRef.current.postWheelDismissTime = performance.now();
       setExpandedIndex(-1);
       expandMotion.animateTo(0, springs.settle);
     }, [expandedIndex, ripples, expandMotion]),
@@ -412,6 +420,14 @@ function CarouselDemo() {
       // After pointer drag, ignore wheel momentum for 400ms
       const POST_DRAG_IGNORE_DURATION = 400;
       if (anim.postDragEndTime > 0 && now - anim.postDragEndTime < POST_DRAG_IGNORE_DURATION) {
+        return;
+      }
+      
+      // After wheel-based dismiss, ignore wheel momentum for 500ms
+      // This uses our own timestamp (not dismiss hook's) to avoid race conditions
+      // where dismiss hook clears postDismissTime before React re-renders expandedIndex
+      const POST_DISMISS_IGNORE_DURATION = 500;
+      if (anim.postWheelDismissTime > 0 && now - anim.postWheelDismissTime < POST_DISMISS_IGNORE_DURATION) {
         return;
       }
       

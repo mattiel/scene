@@ -287,6 +287,13 @@ export class Scrollable {
   // ============================================
 
   /**
+   * Stop all animations and clear momentum/velocity
+   */
+  stop(): void {
+    this.stopAnimations();
+  }
+
+  /**
    * Set offset directly (stops any animation)
    */
   setOffset(offset: number, emitEvent: boolean = true): void {
